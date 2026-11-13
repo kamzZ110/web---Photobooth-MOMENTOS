@@ -1,0 +1,9 @@
+{
+ "version":"0.3", "source":"User review update, 2026-10-31",
+ "status":"Material implementation values; locked palette and spacing remain the source",
+ "paper":{"blurPx":0.6,"fibreOpacity":0.14,"fibreStrokePx":0.9,"densityAreaPx2":110},
+ "card":{"blurPx":0.6,"fibreOpacity":0.10,"fibreStrokePx":0.9,"densityAreaPx2":130},
+ "quiet":{"blurPx":0.6,"fibreOpacity":0.09,"fibreStrokePx":0.9,"densityAreaPx2":140},
+ "dotGrid":{"blurPx":0.35,"opacity":0.12,"spacingPx":24,"radiusPx":0.75},
+ "rules":["Only texture graphics receive layer blur","Place textures below content inside clipped absolute containers","Paper grain is the main texture","Dot grid is limited to illustration accents and a small corner of Duo mode cards","Controls and photo/camera content remain sharp","Texture does not automatically become part of exported photo compositions"]
+}

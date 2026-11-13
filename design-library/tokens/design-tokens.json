@@ -1,0 +1,752 @@
+{
+  "format": "ASELOLE flat token interchange v1; alias {token.id}; colors hex; dimensions px; motion ms",
+  "version": "0.1.0",
+  "tokens": {
+    "primitive.color.linen": {
+      "type": "COLOR",
+      "value": "#F5F2EB",
+      "description": "Warna dasar linen",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.sand": {
+      "type": "COLOR",
+      "value": "#E5DEC9",
+      "description": "Warna dasar sand",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.lavender": {
+      "type": "COLOR",
+      "value": "#DDD0F3",
+      "description": "Warna dasar lavender",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.terracotta": {
+      "type": "COLOR",
+      "value": "#C06C54",
+      "description": "Warna dasar terracotta",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.olive": {
+      "type": "COLOR",
+      "value": "#7F8C72",
+      "description": "Warna dasar olive",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.pink": {
+      "type": "COLOR",
+      "value": "#F4C9D3",
+      "description": "Warna dasar pink",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.espresso": {
+      "type": "COLOR",
+      "value": "#2C2825",
+      "description": "Warna dasar espresso",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.white": {
+      "type": "COLOR",
+      "value": "#FFFFFF",
+      "description": "Warna dasar white",
+      "source": "Permintaan pengguna 30 Oktober 2026"
+    },
+    "primitive.color.secondary": {
+      "type": "COLOR",
+      "value": "#625B56",
+      "description": "Warna dasar secondary",
+      "source": "Tahap 2 Bagian 9.5, tambahan semantik yang disetujui"
+    },
+    "primitive.color.border-light": {
+      "type": "COLOR",
+      "value": "#CFC7BD",
+      "description": "Warna dasar border-light",
+      "source": "Tahap 2 Bagian 9.5, tambahan semantik yang disetujui"
+    },
+    "primitive.color.error-soft": {
+      "type": "COLOR",
+      "value": "#F9E4DF",
+      "description": "Warna dasar error-soft",
+      "source": "Tahap 2 Bagian 9.5, tambahan semantik yang disetujui"
+    },
+    "primitive.space.4": {
+      "type": "FLOAT",
+      "value": 4,
+      "description": "Spacing 4 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.8": {
+      "type": "FLOAT",
+      "value": 8,
+      "description": "Spacing 8 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.12": {
+      "type": "FLOAT",
+      "value": 12,
+      "description": "Spacing 12 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.16": {
+      "type": "FLOAT",
+      "value": 16,
+      "description": "Spacing 16 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.20": {
+      "type": "FLOAT",
+      "value": 20,
+      "description": "Spacing 20 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.24": {
+      "type": "FLOAT",
+      "value": 24,
+      "description": "Spacing 24 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.28": {
+      "type": "FLOAT",
+      "value": 28,
+      "description": "Spacing 28 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.32": {
+      "type": "FLOAT",
+      "value": 32,
+      "description": "Spacing 32 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.36": {
+      "type": "FLOAT",
+      "value": 36,
+      "description": "Spacing 36 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.40": {
+      "type": "FLOAT",
+      "value": 40,
+      "description": "Spacing 40 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.44": {
+      "type": "FLOAT",
+      "value": 44,
+      "description": "Spacing 44 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.48": {
+      "type": "FLOAT",
+      "value": 48,
+      "description": "Spacing 48 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.52": {
+      "type": "FLOAT",
+      "value": 52,
+      "description": "Spacing 52 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.56": {
+      "type": "FLOAT",
+      "value": 56,
+      "description": "Spacing 56 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.60": {
+      "type": "FLOAT",
+      "value": 60,
+      "description": "Spacing 60 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.space.64": {
+      "type": "FLOAT",
+      "value": 64,
+      "description": "Spacing 64 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.radius.4": {
+      "type": "FLOAT",
+      "value": 4,
+      "description": "Radius 4 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.radius.8": {
+      "type": "FLOAT",
+      "value": 8,
+      "description": "Radius 8 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.radius.12": {
+      "type": "FLOAT",
+      "value": 12,
+      "description": "Radius 12 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.radius.16": {
+      "type": "FLOAT",
+      "value": 16,
+      "description": "Radius 16 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.radius.24": {
+      "type": "FLOAT",
+      "value": 24,
+      "description": "Radius 24 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.radius.pill": {
+      "type": "FLOAT",
+      "value": 999,
+      "description": "Radius pill; batas teknis mengikuti setengah tinggi",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.border.1": {
+      "type": "FLOAT",
+      "value": 1,
+      "description": "Border 1 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.border.2": {
+      "type": "FLOAT",
+      "value": 2,
+      "description": "Border 2 px",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.shadow.offset-3": {
+      "type": "FLOAT",
+      "value": 3,
+      "description": "Offset shadow tanpa blur",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.shadow.offset-4": {
+      "type": "FLOAT",
+      "value": 4,
+      "description": "Offset shadow tanpa blur",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.motion.none": {
+      "type": "FLOAT",
+      "value": 0,
+      "description": "Durasi UI dalam ms; bukan waktu capture",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.motion.fast": {
+      "type": "FLOAT",
+      "value": 120,
+      "description": "Durasi UI dalam ms; bukan waktu capture",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.motion.normal": {
+      "type": "FLOAT",
+      "value": 180,
+      "description": "Durasi UI dalam ms; bukan waktu capture",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.motion.dialog": {
+      "type": "FLOAT",
+      "value": 200,
+      "description": "Durasi UI dalam ms; bukan waktu capture",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.motion.panel": {
+      "type": "FLOAT",
+      "value": 240,
+      "description": "Durasi UI dalam ms; bukan waktu capture",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.font.heading": {
+      "type": "STRING",
+      "value": "Fredoka",
+      "description": "Heading ekspresif",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "primitive.font.body": {
+      "type": "STRING",
+      "value": "DM Sans",
+      "description": "Body dan UI",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.color.canvas": {
+      "type": "COLOR",
+      "value": "{primitive.color.linen}",
+      "description": "Pemetaan peran color.canvas",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.surface": {
+      "type": "COLOR",
+      "value": "{primitive.color.white}",
+      "description": "Pemetaan peran color.surface",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.surface-muted": {
+      "type": "COLOR",
+      "value": "{primitive.color.sand}",
+      "description": "Pemetaan peran color.surface-muted",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.text": {
+      "type": "COLOR",
+      "value": "{primitive.color.espresso}",
+      "description": "Pemetaan peran color.text",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.text-secondary": {
+      "type": "COLOR",
+      "value": "{primitive.color.secondary}",
+      "description": "Pemetaan peran color.text-secondary",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.text-inverse": {
+      "type": "COLOR",
+      "value": "{primitive.color.white}",
+      "description": "Pemetaan peran color.text-inverse",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.border-subtle": {
+      "type": "COLOR",
+      "value": "{primitive.color.border-light}",
+      "description": "Pemetaan peran color.border-subtle",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.border-essential": {
+      "type": "COLOR",
+      "value": "{primitive.color.espresso}",
+      "description": "Pemetaan peran color.border-essential",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.action-primary": {
+      "type": "COLOR",
+      "value": "{primitive.color.lavender}",
+      "description": "Pemetaan peran color.action-primary",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.action-secondary": {
+      "type": "COLOR",
+      "value": "{primitive.color.white}",
+      "description": "Pemetaan peran color.action-secondary",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.selected": {
+      "type": "COLOR",
+      "value": "{primitive.color.lavender}",
+      "description": "Pemetaan peran color.selected",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.focus": {
+      "type": "COLOR",
+      "value": "{primitive.color.espresso}",
+      "description": "Pemetaan peran color.focus",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.error-surface": {
+      "type": "COLOR",
+      "value": "{primitive.color.error-soft}",
+      "description": "Pemetaan peran color.error-surface",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.success-surface": {
+      "type": "COLOR",
+      "value": "{primitive.color.linen}",
+      "description": "Pemetaan peran color.success-surface",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.warning-surface": {
+      "type": "COLOR",
+      "value": "{primitive.color.sand}",
+      "description": "Pemetaan peran color.warning-surface",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.success-accent": {
+      "type": "COLOR",
+      "value": "{primitive.color.olive}",
+      "description": "Pemetaan peran color.success-accent",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.error-accent": {
+      "type": "COLOR",
+      "value": "{primitive.color.terracotta}",
+      "description": "Pemetaan peran color.error-accent",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.warning-accent": {
+      "type": "COLOR",
+      "value": "{primitive.color.terracotta}",
+      "description": "Pemetaan peran color.warning-accent",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.disabled-surface": {
+      "type": "COLOR",
+      "value": "{primitive.color.sand}",
+      "description": "Pemetaan peran color.disabled-surface",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.disabled-text": {
+      "type": "COLOR",
+      "value": "{primitive.color.secondary}",
+      "description": "Pemetaan peran color.disabled-text",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.color.editor-canvas": {
+      "type": "COLOR",
+      "value": "{primitive.color.white}",
+      "description": "Pemetaan peran color.editor-canvas",
+      "source": "Implementasi kerja 3.1 dari palet Locked; bukan keputusan produk baru"
+    },
+    "semantic.radius.control": {
+      "type": "FLOAT",
+      "value": "{primitive.radius.12}",
+      "description": "Peran radius.control",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.radius.card": {
+      "type": "FLOAT",
+      "value": "{primitive.radius.16}",
+      "description": "Peran radius.card",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.radius.dialog": {
+      "type": "FLOAT",
+      "value": "{primitive.radius.24}",
+      "description": "Peran radius.dialog",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.border.surface": {
+      "type": "FLOAT",
+      "value": "{primitive.border.1}",
+      "description": "Peran border.surface",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.border.interactive": {
+      "type": "FLOAT",
+      "value": "{primitive.border.2}",
+      "description": "Peran border.interactive",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.space.mobile": {
+      "type": "FLOAT",
+      "value": "{primitive.space.16}",
+      "description": "Peran space.mobile",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.space.tablet": {
+      "type": "FLOAT",
+      "value": "{primitive.space.24}",
+      "description": "Peran space.tablet",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "semantic.space.desktop": {
+      "type": "FLOAT",
+      "value": "{primitive.space.32}",
+      "description": "Peran space.desktop",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.primary.fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.action-primary}",
+      "description": "Binding button.primary.fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.secondary.fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.action-secondary}",
+      "description": "Binding button.secondary.fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.danger.fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.error-surface}",
+      "description": "Binding button.danger.fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.text": {
+      "type": "COLOR",
+      "value": "{semantic.color.text}",
+      "description": "Binding button.text",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.border": {
+      "type": "COLOR",
+      "value": "{semantic.color.border-essential}",
+      "description": "Binding button.border",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.radius": {
+      "type": "FLOAT",
+      "value": "{semantic.radius.control}",
+      "description": "Binding button.radius",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.small.height": {
+      "type": "FLOAT",
+      "value": "{primitive.space.36}",
+      "description": "Binding button.small.height",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.medium.height": {
+      "type": "FLOAT",
+      "value": "{primitive.space.44}",
+      "description": "Binding button.medium.height",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.large.height": {
+      "type": "FLOAT",
+      "value": "{primitive.space.52}",
+      "description": "Binding button.large.height",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.padding": {
+      "type": "FLOAT",
+      "value": "{primitive.space.16}",
+      "description": "Binding button.padding",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.button.gap": {
+      "type": "FLOAT",
+      "value": "{primitive.space.8}",
+      "description": "Binding button.gap",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.input.fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.surface}",
+      "description": "Binding input.fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.input.border": {
+      "type": "COLOR",
+      "value": "{semantic.color.border-essential}",
+      "description": "Binding input.border",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.input.height": {
+      "type": "FLOAT",
+      "value": "{primitive.space.48}",
+      "description": "Binding input.height",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.input.radius": {
+      "type": "FLOAT",
+      "value": "{semantic.radius.control}",
+      "description": "Binding input.radius",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.card.fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.surface}",
+      "description": "Binding card.fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.card.selected-fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.selected}",
+      "description": "Binding card.selected-fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.card.radius": {
+      "type": "FLOAT",
+      "value": "{semantic.radius.card}",
+      "description": "Binding card.radius",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.card.padding": {
+      "type": "FLOAT",
+      "value": "{primitive.space.24}",
+      "description": "Binding card.padding",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.dialog.fill": {
+      "type": "COLOR",
+      "value": "{semantic.color.surface}",
+      "description": "Binding dialog.fill",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.dialog.radius": {
+      "type": "FLOAT",
+      "value": "{semantic.radius.dialog}",
+      "description": "Binding dialog.radius",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.dialog.padding": {
+      "type": "FLOAT",
+      "value": "{primitive.space.24}",
+      "description": "Binding dialog.padding",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.editor.canvas": {
+      "type": "COLOR",
+      "value": "{semantic.color.editor-canvas}",
+      "description": "Binding editor.canvas",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.editor.surface": {
+      "type": "COLOR",
+      "value": "{semantic.color.canvas}",
+      "description": "Binding editor.surface",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.editor.tool-target": {
+      "type": "FLOAT",
+      "value": "{primitive.space.44}",
+      "description": "Binding editor.tool-target",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.status.text": {
+      "type": "COLOR",
+      "value": "{semantic.color.text}",
+      "description": "Binding status.text",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.status.border": {
+      "type": "COLOR",
+      "value": "{semantic.color.border-essential}",
+      "description": "Binding status.border",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.status.radius": {
+      "type": "FLOAT",
+      "value": "{primitive.radius.8}",
+      "description": "Binding status.radius",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.status.padding": {
+      "type": "FLOAT",
+      "value": "{primitive.space.16}",
+      "description": "Binding status.padding",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.focus.width": {
+      "type": "FLOAT",
+      "value": "{primitive.border.2}",
+      "description": "Binding focus.width",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    },
+    "component.focus.offset": {
+      "type": "FLOAT",
+      "value": "{primitive.space.4}",
+      "description": "Binding focus.offset",
+      "source": "Tahap 2 Bagian 9.5 Locked v1"
+    }
+  },
+  "typography": [
+    {
+      "name": "ASELOLE/display/desktop",
+      "family": "Fredoka",
+      "weight": 600,
+      "size": 52,
+      "lineHeight": 62,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/display/mobile",
+      "family": "Fredoka",
+      "weight": 600,
+      "size": 36,
+      "lineHeight": 43,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/h1/desktop",
+      "family": "Fredoka",
+      "weight": 600,
+      "size": 36,
+      "lineHeight": 43,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/h1/mobile",
+      "family": "Fredoka",
+      "weight": 600,
+      "size": 30,
+      "lineHeight": 36,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/h2/desktop",
+      "family": "Fredoka",
+      "weight": 600,
+      "size": 28,
+      "lineHeight": 35,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/h2/mobile",
+      "family": "Fredoka",
+      "weight": 600,
+      "size": 24,
+      "lineHeight": 30,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/h3/desktop",
+      "family": "Fredoka",
+      "weight": 500,
+      "size": 22,
+      "lineHeight": 29,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/h3/mobile",
+      "family": "Fredoka",
+      "weight": 500,
+      "size": 20,
+      "lineHeight": 26,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/body-lg",
+      "family": "DM Sans",
+      "weight": 400,
+      "size": 18,
+      "lineHeight": 27,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/body",
+      "family": "DM Sans",
+      "weight": 400,
+      "size": 16,
+      "lineHeight": 24,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/body-sm",
+      "family": "DM Sans",
+      "weight": 400,
+      "size": 14,
+      "lineHeight": 21,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/caption",
+      "family": "DM Sans",
+      "weight": 400,
+      "size": 12,
+      "lineHeight": 18,
+      "letterSpacing": 0
+    },
+    {
+      "name": "ASELOLE/button",
+      "family": "DM Sans",
+      "weight": 600,
+      "size": 16,
+      "lineHeight": 20,
+      "letterSpacing": 0
+    }
+  ],
+  "shadows": [
+    {
+      "name": "ASELOLE/neo/sm",
+      "offset": 3,
+      "blur": 0,
+      "spread": 0,
+      "color": "primitive.color.espresso"
+    },
+    {
+      "name": "ASELOLE/neo/md",
+      "offset": 4,
+      "blur": 0,
+      "spread": 0,
+      "color": "primitive.color.espresso"
+    }
+  ]
+}

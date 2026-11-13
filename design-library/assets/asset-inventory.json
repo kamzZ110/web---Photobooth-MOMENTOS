@@ -1,0 +1,237 @@
+{
+  "date": "2026-11-10",
+  "icons": [
+    {
+      "id": "camera",
+      "path": "icons/camera.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "camera-off",
+      "path": "icons/camera-off.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "mic",
+      "path": "icons/mic.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "mic-off",
+      "path": "icons/mic-off.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "check",
+      "path": "icons/check.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "close",
+      "path": "icons/close.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "download",
+      "path": "icons/download.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "retake",
+      "path": "icons/retake.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "undo",
+      "path": "icons/undo.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "redo",
+      "path": "icons/redo.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "sticker",
+      "path": "icons/sticker.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "text",
+      "path": "icons/text.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "draw",
+      "path": "icons/draw.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "frame",
+      "path": "icons/frame.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "image",
+      "path": "icons/image.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "lock",
+      "path": "icons/lock.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "info",
+      "path": "icons/info.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "warning",
+      "path": "icons/warning.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "sync",
+      "path": "icons/sync.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    },
+    {
+      "id": "star",
+      "path": "icons/star.svg",
+      "status": "created-local",
+      "use": "UI Classic",
+      "license": "Original geometry created for WEB ASELOLE; no external icon pack"
+    }
+  ],
+  "fonts": [
+    {
+      "family": "Fredoka",
+      "path": "fonts/Fredoka-variable.ttf",
+      "license": "fonts/Fredoka-OFL.txt",
+      "source": "https://github.com/google/fonts/tree/main/ofl/fredoka",
+      "status": "downloaded-original-source"
+    },
+    {
+      "family": "DM Sans",
+      "path": "fonts/DM-Sans-variable.ttf",
+      "license": "fonts/DM-Sans-OFL.txt",
+      "source": "https://github.com/google/fonts/tree/main/ofl/dmsans",
+      "status": "downloaded-original-source"
+    }
+  ],
+  "pending": [
+    "Delapan preset Flipbook ditunda sampai implementasi Classic selesai dan FLIP-TEST-01 dilakukan. Durasi dan mekanisme capture tetap belum ditentukan."
+  ],
+  "prototypePreviews": [
+    "Duo-Guest-Retake-1440-v0.4.png",
+    "Duo-Guest-Retake-390-v0.4.png",
+    "Duo-Export-Loading-1440-v0.4.png",
+    "Duo-Export-Loading-390-v0.4.png",
+    "Duo-Export-Error-1440-v0.4.png",
+    "Duo-Export-Error-390-v0.4.png",
+    "Duo-Export-Success-1440-v0.4.png",
+    "Duo-Export-Success-390-v0.4.png",
+    "Solo-CL04-Retake-Error-1440-v0.5.png",
+    "Solo-CL05-Grid-Selected-1440-v0.5.png",
+    "Solo-CL05-Grid-Selected-390-v0.5.png",
+    "Solo-CL05-Polaroid-Selected-390-v0.5.png",
+    "Solo-CL07-Export-Success-1440-v0.5.png",
+    "Solo-CL07-Export-Success-390-v0.5.png"
+  ],
+  "classicAssetPack": {
+    "status": "created-local-ready-for-review",
+    "templates": [
+      {
+        "paths": [
+          "templates/solo-strip-3.svg",
+          "templates/solo-strip-4.svg",
+          "templates/solo-grid-3.svg",
+          "templates/solo-grid-4.svg",
+          "templates/solo-polaroid-3.svg",
+          "templates/solo-polaroid-4.svg"
+        ],
+        "family": "Solo Strip/Grid/Polaroid",
+        "source": "native editable FigCraft assets exported as SVG"
+      },
+      {
+        "paths": [
+          "templates/duo-strip-3.svg",
+          "templates/duo-strip-4.svg",
+          "templates/duo-grid-3.svg",
+          "templates/duo-grid-4.svg",
+          "templates/duo-keepsake-3.svg",
+          "templates/duo-keepsake-4.svg"
+        ],
+        "family": "Duo paired Strip/Grid/Keepsake",
+        "source": "original standalone SVG layouts"
+      }
+    ],
+    "frames": [
+      "frames/soft-corners.svg",
+      "frames/ticket-edge.svg",
+      "frames/pink-tabs.svg"
+    ],
+    "stickers": [
+      "stickers/starburst.svg",
+      "stickers/daisy.svg",
+      "stickers/heart.svg",
+      "stickers/tape.svg",
+      "stickers/sparkle.svg",
+      "stickers/ribbon.svg",
+      "stickers/wave.svg",
+      "stickers/dotflower.svg"
+    ],
+    "illustrations": [
+      "illustrations/booth-camera-flash.svg",
+      "illustrations/keepsake-stack.svg"
+    ],
+    "nativeBoardPreview": "Classic-asset-board-v0.5.png",
+    "prototypePreviews": [
+      "Solo-CL04-Retake-Error-1440-v0.5.png",
+      "Solo-CL05-Grid-Selected-1440-v0.5.png",
+      "Solo-CL05-Grid-Selected-390-v0.5.png",
+      "Solo-CL05-Polaroid-Selected-390-v0.5.png",
+      "Solo-CL07-Export-Success-1440-v0.5.png",
+      "Solo-CL07-Export-Success-390-v0.5.png"
+    ]
+  }
+}
