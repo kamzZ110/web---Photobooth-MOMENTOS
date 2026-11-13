@@ -1,0 +1,631 @@
+@import './tokens.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html, body {
+  min-height: 100vh;
+  background-color: #EAE4D8;
+  color: var(--semantic-color-text);
+  font-family: var(--primitive-font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Irregular Large Blurred Dots Background (Distinct from Lensbooth Grid) */
+.bg-irregular-dots {
+  position: fixed;
+  inset: -40px;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #EAE4D8;
+  background-image:
+    radial-gradient(circle at 12% 16%, rgba(201, 59, 107, 0.16) 0 42px, transparent 43px),
+    radial-gradient(circle at 28% 8%, rgba(24, 24, 27, 0.10) 0 22px, transparent 23px),
+    radial-gradient(circle at 46% 22%, rgba(122, 179, 239, 0.22) 0 58px, transparent 59px),
+    radial-gradient(circle at 74% 12%, rgba(122, 158, 126, 0.20) 0 34px, transparent 35px),
+    radial-gradient(circle at 90% 28%, rgba(24, 24, 27, 0.11) 0 64px, transparent 65px),
+    radial-gradient(circle at 18% 52%, rgba(122, 179, 239, 0.18) 0 72px, transparent 73px),
+    radial-gradient(circle at 39% 46%, rgba(24, 24, 27, 0.08) 0 18px, transparent 19px),
+    radial-gradient(circle at 62% 58%, rgba(201, 59, 107, 0.14) 0 50px, transparent 51px),
+    radial-gradient(circle at 84% 66%, rgba(122, 158, 126, 0.18) 0 28px, transparent 29px),
+    radial-gradient(circle at 9% 84%, rgba(122, 158, 126, 0.20) 0 46px, transparent 47px),
+    radial-gradient(circle at 33% 88%, rgba(201, 59, 107, 0.13) 0 26px, transparent 27px),
+    radial-gradient(circle at 55% 84%, rgba(24, 24, 27, 0.10) 0 62px, transparent 63px),
+    radial-gradient(circle at 78% 90%, rgba(122, 179, 239, 0.20) 0 40px, transparent 41px),
+    radial-gradient(circle at 95% 86%, rgba(24, 24, 27, 0.09) 0 20px, transparent 21px);
+  filter: blur(8px);
+  transform: scale(1.04);
+}
+
+.bg-ambient-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 25%, rgba(24, 24, 27, 0.04), transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(24, 24, 27, 0.05), transparent 48%);
+}
+
+/* Edge-to-Edge Translucent Glass Header */
+.top-header-full {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.34);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  border-bottom: 1.5px solid rgba(24, 24, 27, 0.12);
+}
+
+.top-header-inner {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* App Shell — Spacious Vertical Rhythm */
+.app-shell {
+  position: relative;
+  z-index: 2;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 96px;
+}
+
+.page-intro {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto 40px;
+}
+
+.eyebrow-text {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primitive-color-berry);
+  margin-bottom: 10px;
+}
+
+.section-header-center {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 44px;
+}
+
+/* Glassmorphism Floating Bar (only where truly floating, e.g. Camera dock) */
+.glass-bar {
+  background: rgba(255, 255, 255, 0.44);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1.5px solid rgba(24, 24, 27, 0.14);
+  border-radius: var(--primitive-radius-pill);
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.brand-title {
+  font-family: var(--primitive-font-heading);
+  font-weight: 800;
+  font-size: 1.28rem;
+  letter-spacing: -0.02em;
+  color: var(--primitive-color-ink);
+}
+
+/* Header Nav Links (Tanpa Nomor, Bersih) */
+.screen-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.nav-link-clean {
+  appearance: none;
+  text-decoration: none;
+  font-family: var(--primitive-font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: var(--primitive-radius-pill);
+  border: 1.5px solid transparent;
+  background: transparent;
+  color: var(--primitive-color-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--primitive-motion-fast) ease,
+    color var(--primitive-motion-fast) ease,
+    border-color var(--primitive-motion-fast) ease;
+}
+
+.nav-link-clean:hover {
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.nav-link-clean.active {
+  background: var(--primitive-color-ink);
+  color: var(--primitive-color-white);
+}
+
+/* Neobrutalism Modern: Flat at Rest -> Forward Pop OR Diagonal Lift on Hover */
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--primitive-font-body);
+  font-weight: 700;
+  font-size: 0.94rem;
+  min-height: 46px;
+  padding: 11px 22px;
+  border-radius: var(--primitive-radius-pill);
+  border: 1.5px solid var(--primitive-color-ink);
+  background: var(--primitive-color-white);
+  color: var(--primitive-color-ink);
+  cursor: pointer;
+  box-shadow: 0 0 0 transparent;
+  transition:
+    transform var(--primitive-motion-normal) cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow var(--primitive-motion-normal) cubic-bezier(0.22, 1, 0.36, 1),
+    background-color var(--primitive-motion-fast) ease,
+    color var(--primitive-motion-fast) ease;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--primitive-color-berry);
+  outline-offset: 3px;
+}
+
+.btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Forward Pop (Important Primary & Secondary CTAs) */
+.btn-primary-pop {
+  background: var(--primitive-color-berry);
+  color: var(--primitive-color-white);
+}
+
+.btn-primary-pop:hover:not(:disabled) {
+  background: var(--primitive-color-berry-hover);
+  transform: translateY(-2px) scale(1.028);
+  box-shadow: var(--primitive-shadow-pop-berry);
+}
+
+.btn-secondary-pop {
+  background: var(--primitive-color-white);
+  color: var(--primitive-color-ink);
+}
+
+.btn-secondary-pop:hover:not(:disabled) {
+  background: var(--primitive-color-sky);
+  color: var(--primitive-color-ink);
+  transform: translateY(-2px) scale(1.025);
+  box-shadow: var(--primitive-shadow-pop-sky);
+}
+
+/* Diagonal Hard Lift (Utility Controls) */
+.btn-lift:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 3px 3px 0px #18181B;
+}
+
+.btn-lift.active-pill {
+  background: var(--primitive-color-sky);
+  color: var(--primitive-color-ink);
+}
+
+/* Clean Airy Cards (Minimal 1.5px border, 32px padding, no heavy shadow) */
+.clean-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1.5px solid var(--primitive-color-ink);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 0 0 transparent;
+  transition:
+    transform var(--primitive-motion-normal) cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow var(--primitive-motion-normal) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.clean-card.interactive:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px var(--primitive-color-ink);
+}
+
+/* Squircle Icon Badge (Lensbooth-inspired clean accent without clutter) */
+.squircle-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1.5px solid var(--primitive-color-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  margin-bottom: 18px;
+}
+
+/* Subtle Pill Tag */
+.pill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--primitive-color-ink);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* FAQ Accordion Pill Bars */
+.faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.faq-item {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1.5px solid var(--primitive-color-ink);
+  border-radius: 20px;
+  overflow: hidden;
+  transition: transform 160ms ease;
+}
+
+.faq-item:hover {
+  transform: translateY(-1px);
+}
+
+.faq-trigger {
+  width: 100%;
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--primitive-font-body);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primitive-color-ink);
+}
+
+.faq-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #FCEEF3;
+  border: 1.5px solid var(--primitive-color-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.faq-body {
+  padding: 0 22px 20px 66px;
+  font-size: 0.94rem;
+  color: var(--primitive-color-ink-muted);
+}
+
+/* Subtle Developer/Demo State Switcher (Quiet, unobtrusive) */
+.demo-state-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px dashed rgba(24, 24, 27, 0.25);
+  margin: 0 auto 32px;
+  max-width: fit-content;
+}
+
+/* Solid Ink Footer (Anchoring the bottom of Landing Page) */
+.solid-footer {
+  background: var(--primitive-color-ink);
+  color: var(--primitive-color-white);
+  border-radius: 32px;
+  padding: 56px 40px 36px;
+}
+
+/* Instant Camera Rig + Ejecting Photo Strip Component Styles */
+.instant-camera-rig {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+
+.camera-body {
+  position: relative;
+  width: 310px;
+  background: var(--primitive-color-white);
+  border: 2px solid var(--primitive-color-ink);
+  border-radius: 26px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 14px 30px -10px rgba(24, 24, 27, 0.16);
+  z-index: 3;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.camera-body:hover {
+  transform: translateY(-2px);
+}
+
+.camera-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.camera-flash {
+  width: 48px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid var(--primitive-color-ink);
+  background: repeating-linear-gradient(
+    90deg,
+    #FFFFFF,
+    #FFFFFF 4px,
+    #EBF4FD 4px,
+    #EBF4FD 8px
+  );
+}
+
+.camera-led-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.camera-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primitive-color-sage);
+  border: 1.5px solid var(--primitive-color-ink);
+}
+
+.camera-shutter-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--primitive-color-berry);
+  border: 1.5px solid var(--primitive-color-ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primitive-color-white);
+  font-size: 0.75rem;
+  font-weight: 800;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.camera-shutter-btn:hover {
+  background: var(--primitive-color-berry-hover);
+  transform: scale(1.08);
+}
+
+.camera-stripe-band {
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--primitive-color-ink);
+  background: linear-gradient(
+    90deg,
+    var(--primitive-color-berry) 0% 33%,
+    var(--primitive-color-sky) 33% 66%,
+    var(--primitive-color-sage) 66% 100%
+  );
+  margin-bottom: 14px;
+}
+
+.camera-lens-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 12px;
+}
+
+.camera-lens-outer {
+  width: 126px;
+  height: 126px;
+  border-radius: 50%;
+  border: 2px solid var(--primitive-color-ink);
+  background: var(--primitive-color-cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-lens-inner {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid var(--primitive-color-ink);
+  background: radial-gradient(circle at 32% 30%, #3F3F46, #18181B 72%);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primitive-color-white);
+  overflow: hidden;
+}
+
+.camera-lens-glint {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  width: 22px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  transform: rotate(-28deg);
+}
+
+.camera-printer-slot {
+  width: 230px;
+  height: 12px;
+  margin: 4px auto 0;
+  background: var(--primitive-color-ink);
+  border-radius: 999px;
+  position: relative;
+  z-index: 4;
+}
+
+/* Ejecting Photo Strip below the Camera Slot */
+.ejecting-strip-wrapper {
+  margin-top: -6px;
+  z-index: 2;
+  perspective: 800px;
+}
+
+.ejecting-strip {
+  width: 204px;
+  background: var(--primitive-color-white);
+  border: 1.5px solid var(--primitive-color-ink);
+  border-radius: 0 0 14px 14px;
+  padding: 12px 10px 14px;
+  box-shadow: 4px 6px 0px var(--primitive-color-ink);
+  transform-origin: top center;
+  animation: stripEjectFloat 4.2s ease-in-out infinite;
+}
+
+.ejecting-strip.eject-burst {
+  animation: stripPrintBurst 680ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes stripEjectFloat {
+  0%, 100% {
+    transform: translateY(0px) rotate(-0.8deg);
+  }
+  50% {
+    transform: translateY(6px) rotate(0.8deg);
+  }
+}
+
+@keyframes stripPrintBurst {
+  0% {
+    transform: translateY(-48px) scaleY(0.82);
+    opacity: 0.5;
+  }
+  70% {
+    transform: translateY(8px) scaleY(1.02);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0px) scaleY(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ejecting-strip,
+  .ejecting-strip.eject-burst {
+    animation: none !important;
+  }
+}
+
+/* Typography & Grids */
+.heading-display {
+  font-family: var(--primitive-font-heading);
+  font-size: clamp(2.4rem, 4.6vw, 3.6rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.028em;
+  color: var(--primitive-color-ink);
+}
+
+.heading-h1 {
+  font-family: var(--primitive-font-heading);
+  font-size: clamp(1.85rem, 3.2vw, 2.5rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.heading-h2 {
+  font-family: var(--primitive-font-heading);
+  font-size: clamp(1.28rem, 2vw, 1.55rem);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.text-muted {
+  color: var(--primitive-color-ink-muted);
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 900px) {
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .page-stack {
+    gap: 64px;
+  }
+  .solid-footer {
+    padding: 36px 24px;
+  }
+}

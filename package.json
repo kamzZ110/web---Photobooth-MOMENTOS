@@ -1,0 +1,16 @@
+{
+  "name": "momentos-photobooth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Momentos — Interactive Web Photobooth (Solo & Duo Classic First)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm --workspace @momentos/web run dev",
+    "build": "npm --workspace @momentos/web run build",
+    "preview": "npm --workspace @momentos/web run preview",
+    "typecheck": "npm --workspace @momentos/web run typecheck"
+  }
+}

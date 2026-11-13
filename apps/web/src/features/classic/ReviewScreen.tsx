@@ -1,0 +1,231 @@
+import React, { useState } from 'react';
+import type { BoothMode, CapturedFrame, ScreenId } from '@momentos/shared';
+import { InstantCameraRig } from '../../components/InstantCameraRig';
+
+interface ReviewScreenProps {
+  mode: BoothMode;
+  takeCount: 3 | 4;
+  frames: CapturedFrame[];
+  retakesRemaining: number;
+  onRetakeFrame: (frameId: number) => void;
+  onNavigate: (screen: ScreenId) => void;
+}
+
+export const ReviewScreen: React.FC<ReviewScreenProps> = ({
+  mode,
+  takeCount,
+  frames,
+  retakesRemaining,
+  onRetakeFrame,
+  onNavigate,
+}) => {
+  const [guestRetakeRequestFrame, setGuestRetakeRequestFrame] = useState<number | null>(
+    mode === 'duo' ? 2 : null
+  );
+
+  const visibleFrames = frames.slice(0, takeCount);
+
+  return (
+    <div className="page-stack">
+      <section>
+        {/* Centered Clean Intro */}
+        <div className="page-intro">
+          <span className="eyebrow-text">Review &amp; Retake</span>
+          <h1 className="heading-h1" style={{ marginBottom: 12 }}>
+            Periksa setiap pose sebelum masuk ke Editor.
+          </h1>
+          <p className="text-muted">
+            Kuota retake tersisa: <strong>{retakesRemaining} dari 3</strong>. Pilih
+            pose yang ingin diulang jika masih ada yang kurang pas.
+          </p>
+        </div>
+
+        {mode === 'duo' && guestRetakeRequestFrame === null && (
+          <div className="demo-state-strip">
+            <button
+              type="button"
+              className="btn btn-lift"
+              style={{ minHeight: 32, padding: '4px 12px', fontSize: '0.76rem' }}
+              onClick={() => setGuestRetakeRequestFrame(2)}
+            >
+              Simulasikan Guest Minta Retake Pose #2
+            </button>
+          </div>
+        )}
+
+        {/* Banner Persetujuan Host saat Guest Meminta Retake di Mode Duo */}
+        {mode === 'duo' && guestRetakeRequestFrame !== null && (
+          <div
+            className="clean-card"
+            style={{
+              background: '#EBF4FD',
+              marginBottom: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 16,
+            }}
+          >
+            <div>
+              <span className="eyebrow-text" style={{ marginBottom: 4 }}>
+                Permintaan Retake Guest
+              </span>
+              <h3 className="heading-h2">
+                Guest (Nadia) ingin mengulang Pose #{guestRetakeRequestFrame}
+              </h3>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-primary-pop"
+                disabled={retakesRemaining <= 0}
+                onClick={() => {
+                  onRetakeFrame(guestRetakeRequestFrame);
+                  setGuestRetakeRequestFrame(null);
+                }}
+              >
+                Setujui &amp; Foto Ulang
+              </button>
+              <button
+                type="button"
+                className="btn btn-lift"
+                onClick={() => setGuestRetakeRequestFrame(null)}
+              >
+                Tolak
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.45fr) minmax(290px, 0.85fr)',
+            gap: 32,
+            alignItems: 'start',
+          }}
+        >
+          <div className="grid-2">
+            {visibleFrames.map((frame) => (
+              <div key={frame.id} className="clean-card interactive" style={{ padding: 22 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 12,
+                  }}
+                >
+                  <strong>{frame.label}</strong>
+                  <span style={{ fontSize: '0.78rem', color: '#52525B', fontWeight: 600 }}>
+                    {frame.retakeCount > 0 ? `Diulang ${frame.retakeCount}×` : 'Asli'}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    height: 150,
+                    borderRadius: 14,
+                    border: '1.5px solid #18181B',
+                    background: frame.accentBg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '2.6rem',
+                    marginBottom: 16,
+                  }}
+                >
+                  {mode === 'duo'
+                    ? `${frame.hostPose} ⚡ ${frame.guestPose}`
+                    : frame.hostPose}
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-lift"
+                  style={{ width: '100%' }}
+                  disabled={retakesRemaining <= 0}
+                  onClick={() => onRetakeFrame(frame.id)}
+                >
+                  {retakesRemaining > 0
+                    ? `Foto Ulang ${frame.label}`
+                    : 'Kuota Retake Habis'}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+            <InstantCameraRig
+              mode={mode}
+              badgeText="REVIEW STRIP"
+              caption="SIAP MASUK EDITOR"
+              frames={visibleFrames.map((fr) => ({
+                id: fr.id,
+                label: fr.label,
+                hostPose: fr.hostPose,
+                guestPose: fr.guestPose,
+                bg: fr.accentBg,
+              }))}
+            />
+
+            <button
+              type="button"
+              className="btn btn-primary-pop"
+              style={{ width: '100%' }}
+              onClick={() => onNavigate('editor')}
+            >
+              Lanjut ke Template &amp; Editor →
+            </button>
+            <button
+              type="button"
+              className="btn btn-lift"
+              style={{ width: '100%' }}
+              onClick={() => onNavigate('camera')}
+            >
+              ← Kembali ke Kamera
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Aturan Retake (Menjaga halaman panjang & informatif) */}
+      <section>
+        <div className="section-header-center">
+          <span className="eyebrow-text">Aturan Retake</span>
+          <h2 className="heading-h1">Foto ulang tanpa mengorbankan pose yang sudah bagus.</h2>
+        </div>
+
+        <div className="grid-2">
+          <div className="clean-card">
+            <div className="squircle-icon" style={{ background: '#FCEEF3' }}>
+              3×
+            </div>
+            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
+              Maksimal 3 Kali per Sesi
+            </h3>
+            <p className="text-muted" style={{ fontSize: '0.92rem' }}>
+              Kamu bebas memilih frame mana saja yang ingin diulang hingga total 3 kali
+              retake, tanpa perlu mengulang seluruh sesi dari awal.
+            </p>
+          </div>
+
+          <div className="clean-card">
+            <div className="squircle-icon" style={{ background: '#EBF4FD' }}>
+              🤝
+            </div>
+            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
+              Persetujuan Host pada Mode Duo
+            </h3>
+            <p className="text-muted" style={{ fontSize: '0.92rem' }}>
+              Guest dapat mengajukan permintaan retake untuk frame tertentu, lalu Host
+              menyetujuinya agar kedua kamera siap menghitung mundur bersama.
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};

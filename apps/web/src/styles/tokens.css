@@ -1,0 +1,95 @@
+/* Momentos Design Tokens — CHG-4.0-001 (13 Nov 2026) */
+:root {
+  /* Primitive 6-Color Palette (LOCK-03 & LOCK-04 Revised) */
+  --primitive-color-cream: #FAF7F2;
+  --primitive-color-white: #FFFFFF;
+  --primitive-color-ink: #18181B;
+  --primitive-color-berry: #C93B6B;
+  --primitive-color-berry-hover: #AE2C57;
+  --primitive-color-sky: #7AB3EF;
+  --primitive-color-sky-hover: #5C9CE0;
+  --primitive-color-sage: #7A9E7E;
+
+  /* Supporting Tints Derived from 6-Color Palette */
+  --primitive-color-ink-muted: #52525B;
+  --primitive-color-border-subtle: rgba(24, 24, 27, 0.14);
+  --primitive-color-berry-soft: #FCEEF3;
+  --primitive-color-sky-soft: #EBF4FD;
+  --primitive-color-sage-soft: #ECF3ED;
+
+  /* Glassmorphism Surface Tokens */
+  --primitive-glass-bg: rgba(255, 255, 255, 0.68);
+  --primitive-glass-border: rgba(24, 24, 27, 0.14);
+  --primitive-glass-blur: 16px;
+
+  /* Spacing Scale (4px base, 4-64px) */
+  --primitive-space-4: 4px;
+  --primitive-space-8: 8px;
+  --primitive-space-12: 12px;
+  --primitive-space-16: 16px;
+  --primitive-space-20: 20px;
+  --primitive-space-24: 24px;
+  --primitive-space-28: 28px;
+  --primitive-space-32: 32px;
+  --primitive-space-36: 36px;
+  --primitive-space-40: 40px;
+  --primitive-space-44: 44px;
+  --primitive-space-48: 48px;
+  --primitive-space-52: 52px;
+  --primitive-space-56: 56px;
+  --primitive-space-60: 60px;
+  --primitive-space-64: 64px;
+
+  /* Radius Scale */
+  --primitive-radius-4: 4px;
+  --primitive-radius-8: 8px;
+  --primitive-radius-12: 12px;
+  --primitive-radius-16: 16px;
+  --primitive-radius-24: 24px;
+  --primitive-radius-pill: 999px;
+
+  /* Borders & Hover Elevation */
+  --primitive-border-1: 1.5px;
+  --primitive-border-2: 2px;
+  --primitive-shadow-offset-3: 3px;
+  --primitive-shadow-offset-4: 4px;
+  --primitive-shadow-pop-berry: 0 12px 24px -6px rgba(201, 59, 107, 0.44), 0 4px 10px -2px rgba(24, 24, 27, 0.14);
+  --primitive-shadow-pop-sky: 0 12px 24px -6px rgba(122, 179, 239, 0.42), 0 4px 10px -2px rgba(24, 24, 27, 0.12);
+  --primitive-shadow-lift-hard: 3px 3px 0px #18181B;
+
+  /* Motion Scale (LOCK-10) */
+  --primitive-motion-none: 0ms;
+  --primitive-motion-fast: 120ms;
+  --primitive-motion-normal: 180ms;
+  --primitive-motion-dialog: 200ms;
+  --primitive-motion-panel: 240ms;
+
+  /* Typography (LOCK-06 Revised) */
+  --primitive-font-heading: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
+  --primitive-font-body: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Semantic Tokens */
+  --semantic-color-canvas: var(--primitive-color-cream);
+  --semantic-color-surface: var(--primitive-color-white);
+  --semantic-color-surface-muted: var(--primitive-color-sky-soft);
+  --semantic-color-text: var(--primitive-color-ink);
+  --semantic-color-text-secondary: var(--primitive-color-ink-muted);
+  --semantic-color-text-inverse: var(--primitive-color-white);
+  --semantic-color-border-subtle: var(--primitive-color-border-subtle);
+  --semantic-color-border-essential: var(--primitive-color-ink);
+  --semantic-color-action-primary: var(--primitive-color-berry);
+  --semantic-color-action-primary-hover: var(--primitive-color-berry-hover);
+  --semantic-color-action-secondary: var(--primitive-color-white);
+  --semantic-color-action-secondary-hover: var(--primitive-color-sky);
+  --semantic-color-selected: var(--primitive-color-berry-soft);
+  --semantic-color-focus: var(--primitive-color-berry);
+  --semantic-color-error-surface: var(--primitive-color-berry-soft);
+  --semantic-color-success-surface: var(--primitive-color-sage-soft);
+  --semantic-color-warning-surface: var(--primitive-color-sky-soft);
+  --semantic-color-success-accent: var(--primitive-color-sage);
+  --semantic-color-error-accent: var(--primitive-color-berry);
+  --semantic-color-warning-accent: var(--primitive-color-sky);
+  --semantic-color-disabled-surface: rgba(24, 24, 27, 0.06);
+  --semantic-color-disabled-text: var(--primitive-color-ink-muted);
+  --semantic-color-editor-canvas: var(--primitive-color-white);
+}
