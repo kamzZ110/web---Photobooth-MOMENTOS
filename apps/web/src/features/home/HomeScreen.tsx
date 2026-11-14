@@ -4,6 +4,7 @@ import { InstantCameraRig, MiniCameraStripIcon } from '../../components/InstantC
 
 interface HomeScreenProps {
   mode: BoothMode;
+  isNight: boolean;
   onStartMode: (mode: BoothMode, targetScreen: ScreenId) => void;
   onSelectScreen: (screen: ScreenId) => void;
 }
@@ -12,12 +13,12 @@ const FAQ_ITEMS = [
   {
     num: '01',
     q: 'Apakah harus buat akun atau login dulu sebelum foto?',
-    a: 'Tidak sama sekali. Kamu bisa langsung membuka kamera untuk Mode Solo atau membuat kode Room untuk Mode Duo tanpa registrasi, tanpa password, dan tanpa menyimpan riwayat publik.',
+    a: 'Tidak sama sekali. Kamu bisa langsung membuka kamera untuk Mode Solo atau membuat kode Room untuk Mode Duo tanpa registrasi dan tanpa menyimpan riwayat publik.',
   },
   {
     num: '02',
     q: 'Bagaimana cara kerja Mode Duo kalau kami berada di kota yang berbeda?',
-    a: 'Host membuat Room lalu membagikan kode 1-klik ke 1 teman (Guest). Setelah keduanya terhubung dan menekan Ready, countdown berjalan sinkron dan kedua perangkat mengambil frame lokal berkualitas tajam pada target waktu yang sama.',
+    a: 'Host membuat Room lalu membagikan kode ke 1 teman (Guest). Setelah keduanya terhubung dan menekan Ready, countdown berjalan sinkron dan kedua perangkat mengambil frame lokal pada target waktu yang sama.',
   },
   {
     num: '03',
@@ -27,184 +28,139 @@ const FAQ_ITEMS = [
   {
     num: '04',
     q: 'Apa yang terjadi kalau koneksi salah satu peserta tiba-tiba putus?',
-    a: 'Sistem menahan sesi selama maksimal 5 menit agar peserta yang terputus bisa masuk kembali (rejoin) tanpa kehilangan hasil foto yang sudah diambil. Jika putus saat di Editor, kanvas dijeda sementara untuk mencegah konflik.',
-  },
-  {
-    num: '05',
-    q: 'Apakah foto saya aman dan tersimpan di galeri publik?',
-    a: 'Aman. Tidak ada galeri publik dan tidak ada tautan share publik permanen. Semua aset bersifat sementara selama sesi berlangsung dan hasil akhir diunduh langsung ke perangkat masing-masing (PNG atau JPG).',
-  },
-  {
-    num: '06',
-    q: 'Bagaimana cara kerja stiker dan Undo di Editor Kolaboratif?',
-    a: 'Host dan Guest dapat menghias strip secara bersamaan di kanvas putih netral (#FFFFFF) tanpa saling mengunci objek. Tombol Undo bersifat personal: hanya membatalkan perubahan milikmu sendiri tanpa mengganggu hiasan temanmu.',
+    a: 'Sistem menahan sesi selama maksimal 5 menit agar peserta yang terputus bisa masuk kembali (rejoin) tanpa kehilangan hasil foto yang sudah diambil.',
   },
 ];
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   mode,
+  isNight,
   onStartMode,
   onSelectScreen,
 }) => {
   const [openFaq, setOpenFaq] = useState<string | null>('01');
 
+  const navigateTop = (screen: ScreenId) => {
+    onSelectScreen(screen);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="page-stack">
-      {/* 1. HERO SECTION — Cardless, Open Canvas */}
+      {/* 1. HERO CENTERED LAYOUT: Teks Lebar di Atas -> Kamera HD & Strip Animasi di Tengah -> Tombol Solo & Duo di Bawah */}
       <section
-        className="grid-2"
         style={{
+          display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
-          paddingTop: 12,
+          textAlign: 'center',
+          paddingTop: 6,
         }}
       >
-        <div>
-          <div className="pill-tag" style={{ marginBottom: 20 }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: '#7A9E7E',
-                display: 'inline-block',
-              }}
-            />
-            <span>Web Photobooth untuk Solo &amp; Duo Jarak Jauh</span>
-          </div>
-
-          <h1 className="heading-display" style={{ marginBottom: 20 }}>
-            Abadikan{' '}
-            <span style={{ color: '#C93B6B', fontStyle: 'italic' }}>momen</span>{' '}
-            bersama, dari mana saja.
-          </h1>
-
-          <p
-            className="text-muted"
-            style={{ fontSize: '1.1rem', maxWidth: 500, marginBottom: 32 }}
-          >
-            Buka kamera langsung di browser, ambil 3–4 pose sinkron bersama teman
-            atau sendiri, hias strip di kanvas kolaboratif, lalu cetak ke perangkatmu.
-          </p>
-
-          {/* Tombol Solo & Duo di Beranda */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 28 }}>
-            <button
-              type="button"
-              className="btn btn-primary-pop"
-              style={{ minHeight: 54, padding: '12px 28px', fontSize: '1rem' }}
-              onClick={() => onStartMode('solo', 'camera')}
-            >
-              📸 Mulai Mode Solo
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary-pop"
-              style={{ minHeight: 54, padding: '12px 28px', fontSize: '1rem' }}
-              onClick={() => onStartMode('duo', 'room')}
-            >
-              👩‍💻🧑‍💻 Mulai Mode Duo
-            </button>
-          </div>
-
-          <div
+        <div className="pill-tag" style={{ marginBottom: 18 }}>
+          <span
             style={{
-              fontSize: '0.86rem',
-              fontWeight: 600,
-              color: '#52525B',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px 16px',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#7A9E7E',
+              display: 'inline-block',
             }}
-          >
-            <span>Solo &amp; Duo</span>
-            <span>·</span>
-            <span>Tanpa Daftar / Login</span>
-            <span>·</span>
-            <span>Maks 2 Peserta per Room</span>
-            <span>·</span>
-            <span>Unduh PNG &amp; JPG</span>
-          </div>
+          />
+          <span>Web Photobooth untuk Solo &amp; Duo Jarak Jauh</span>
         </div>
 
-        {/* Instant Camera + Ejecting Strip (Terbuka di atas canvas, tanpa kotak pembungkus) */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <InstantCameraRig
-            mode={mode}
-            caption="MOMENTOS • CLASSIC STRIP"
-            badgeText={mode === 'duo' ? 'DUO SYNC' : 'SOLO CAM'}
-          />
+        {/* Judul & Subjudul Lebar ("Ujung ke Ujung") — Font Aksen Annabel (Opsi B) */}
+        <h1 className="heading-display hero-headline-wide" style={{ marginBottom: 18 }}>
+          Abadikan setiap{' '}
+          <span className="font-upright-serif">cerita dan tawa</span> bersama,
+          dari mana saja.
+        </h1>
+
+        <p
+          className="text-muted hero-subtitle-wide"
+          style={{ fontSize: '1.08rem', marginBottom: 34 }}
+        >
+          Buka kamera langsung di browser, ambil 3–4 pose sinkron bersama teman
+          atau sendiri, hias strip di kanvas kolaboratif, lalu cetak ke perangkatmu.
+        </p>
+
+        {/* Kamera HD di Tengah (antara Teks & Tombol Mulai) + Animasi Roller & Film Develop */}
+        <InstantCameraRig
+          mode={mode}
+          isNight={isNight}
+          useSamplePhotoStrip
+          showConnectionWings
+        />
+
+        {/* Tombol Solo & Duo di Bawah Kamera */}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: 14,
+            marginTop: 28,
+            marginBottom: 18,
+          }}
+        >
+          <button
+            type="button"
+            className="btn btn-primary-pop"
+            style={{ minHeight: 52, padding: '12px 28px', fontSize: '0.98rem' }}
+            onClick={() => onStartMode('solo', 'camera')}
+          >
+            📸 Mulai Mode Solo
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary-pop"
+            style={{ minHeight: 52, padding: '12px 28px', fontSize: '0.98rem' }}
+            onClick={() => onStartMode('duo', 'room')}
+          >
+            👩‍💻🧑‍💻 Mulai Mode Duo
+          </button>
+        </div>
+
+        <div
+          style={{
+            fontSize: '0.86rem',
+            fontWeight: 350,
+            opacity: 0.78,
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: '8px 16px',
+          }}
+        >
+          <span>Solo &amp; Duo</span>
+          <span>·</span>
+          <span>Tanpa Daftar / Login</span>
+          <span>·</span>
+          <span>Maks 2 Peserta per Room</span>
+          <span>·</span>
+          <span>Bebas Watermark</span>
         </div>
       </section>
 
-      {/* 2. MEET MOMENTOS (3 Pilar Simpel — Tanpa Nested Badges) */}
+      {/* 2. RINGKASAN CARA KERJA (+ Link ke Halaman Penuh Cara Kerja) */}
       <section>
         <div className="section-header-center">
-          <span className="eyebrow-text">Kenapa Momentos</span>
+          <span className="eyebrow-text">Ringkasan · Cara Kerja</span>
           <h2 className="heading-h1" style={{ marginBottom: 12 }}>
-            Photobooth simpel yang langsung jalan di browser.
+            Empat langkah sederhana menuju{' '}
+            <span className="font-upright-serif">strip</span> fotomu.
           </h2>
           <p className="text-muted">
-            Tidak perlu pasang aplikasi atau buat akun. Buka halaman, izinkan kamera,
-            dan langsung mulai sesi fotomu dalam hitungan detik.
+            Langsung jalan di browser laptop maupun ponsel tanpa perlu mengunduh aplikasi.
           </p>
         </div>
 
-        <div className="grid-3">
-          <div className="clean-card interactive">
-            <div className="squircle-icon" style={{ background: '#FCEEF3' }}>
-              ⚡
-            </div>
-            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
-              Langsung di Browser
-            </h3>
-            <p className="text-muted" style={{ fontSize: '0.94rem' }}>
-              Berjalan mulus di browser laptop maupun ponsel tanpa perlu unduh aplikasi
-              tambahan atau login.
-            </p>
-          </div>
-
+        <div className="grid-2" style={{ marginBottom: 28 }}>
           <div className="clean-card interactive">
             <div className="squircle-icon" style={{ background: '#EBF4FD' }}>
-              🌐
-            </div>
-            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
-              Sinkronisasi Jarak Jauh
-            </h3>
-            <p className="text-muted" style={{ fontSize: '0.94rem' }}>
-              Mode Duo menghubungkan tepat 2 peserta dengan aba-aba sinkron sehingga
-              hasil foto tetap tajam di kedua sisi.
-            </p>
-          </div>
-
-          <div className="clean-card interactive">
-            <div className="squircle-icon" style={{ background: '#ECF3ED' }}>
-              🔒
-            </div>
-            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
-              Privat &amp; Sementara
-            </h3>
-            <p className="text-muted" style={{ fontSize: '0.94rem' }}>
-              Tidak ada galeri publik atau link sebar permanen. Foto hanya diunduh
-              langsung ke perangkat masing-masing.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. CARA KERJA (4 Langkah Simpel 2x2) */}
-      <section id="cara-kerja" style={{ scrollMarginTop: 90 }}>
-        <div className="section-header-center">
-          <span className="eyebrow-text">Cara Kerja</span>
-          <h2 className="heading-h1" style={{ marginBottom: 12 }}>
-            Empat langkah sederhana dari buka browser sampai cetak strip.
-          </h2>
-        </div>
-
-        <div className="grid-2">
-          <div className="clean-card interactive">
-            <div className="squircle-icon" style={{ background: '#EBF4FD' }}>
-              1
+              01
             </div>
             <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Pilih Mode Solo atau Buat Room Duo
@@ -217,7 +173,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <div className="clean-card interactive">
             <div className="squircle-icon" style={{ background: '#FCEEF3' }}>
-              2
+              02
             </div>
             <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Siapkan Kamera &amp; Tekan Ready
@@ -230,7 +186,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <div className="clean-card interactive">
             <div className="squircle-icon" style={{ background: '#FAF7F2' }}>
-              3
+              03
             </div>
             <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Pose, Review &amp; Retake Seperlunya
@@ -243,7 +199,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <div className="clean-card interactive">
             <div className="squircle-icon" style={{ background: '#ECF3ED' }}>
-              4
+              04
             </div>
             <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Hias Bersama &amp; Unduh Hasilnya
@@ -254,18 +210,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </p>
           </div>
         </div>
+
+        <div style={{ textAlign: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-lift"
+            onClick={() => navigateTop('how-it-works')}
+          >
+            Pelajari Detail Cara Kerja →
+          </button>
+        </div>
       </section>
 
-      {/* 4. PILIH MODE (Solo vs Duo) */}
-      <section id="pilih-mode" style={{ scrollMarginTop: 90 }}>
+      {/* 3. RINGKASAN PILIH MODE SOLO & DUO */}
+      <section>
         <div className="section-header-center">
-          <span className="eyebrow-text">Pilih Mode</span>
+          <span className="eyebrow-text">Ringkasan · Mode Solo &amp; Duo</span>
           <h2 className="heading-h1" style={{ marginBottom: 12 }}>
-            Sendiri atau berdua, hasilnya tetap seimbang.
+            Sendiri atau <span className="font-upright-serif">berdua</span>, hasilnya tetap seimbang.
           </h2>
         </div>
 
-        <div className="grid-2">
+        <div className="grid-2" style={{ marginBottom: 28 }}>
           <div className="clean-card interactive">
             <div
               style={{
@@ -276,7 +242,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               }}
             >
               <h3 className="heading-h2">Classic Solo Booth</h3>
-              <MiniCameraStripIcon accentColor="#C93B6B" size={40} />
+              <MiniCameraStripIcon size={46} variant="white" />
             </div>
             <p className="text-muted" style={{ marginBottom: 24, fontSize: '0.95rem' }}>
               Langsung masuk ke studio kamera tanpa ruang tunggu. Cocok untuk foto cepat,
@@ -302,7 +268,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               }}
             >
               <h3 className="heading-h2">Classic Duo Booth</h3>
-              <MiniCameraStripIcon accentColor="#7AB3EF" size={40} />
+              <MiniCameraStripIcon size={46} variant="classic" />
             </div>
             <p className="text-muted" style={{ marginBottom: 24, fontSize: '0.95rem' }}>
               Satu Host dan satu Guest terhubung lewat kode room privat. Lengkap dengan
@@ -318,14 +284,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </button>
           </div>
         </div>
+
+        <div style={{ textAlign: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-lift"
+            onClick={() => navigateTop('modes-info')}
+          >
+            Bandingkan Mode Solo &amp; Duo Selengkapnya →
+          </button>
+        </div>
       </section>
 
-      {/* 5. FORMAT YANG BISA DIBUAT (Open Clean Showcase) */}
-      <section id="fitur-studio" style={{ scrollMarginTop: 90 }}>
+      {/* 4. RINGKASAN FITUR STUDIO */}
+      <section>
         <div className="section-header-center">
-          <span className="eyebrow-text">Format &amp; Editor</span>
+          <span className="eyebrow-text">Ringkasan · Fitur Studio</span>
           <h2 className="heading-h1" style={{ marginBottom: 12 }}>
-            Satu sesi foto, berbagai gaya cetakan.
+            Satu sesi foto, berbagai <span className="font-upright-serif">gaya</span> cetakan.
           </h2>
           <p className="text-muted">
             Semua layout diedit di atas kanvas putih bersih (#FFFFFF) agar warna foto
@@ -333,140 +309,56 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </p>
         </div>
 
-        <div className="grid-3">
+        <div className="grid-3" style={{ marginBottom: 28 }}>
           <div className="clean-card interactive">
-            <div
-              style={{
-                height: 120,
-                borderRadius: 14,
-                background: '#FAF7F2',
-                border: '1.5px solid #18181B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                marginBottom: 20,
-              }}
-            >
-              <div
-                style={{
-                  width: 44,
-                  height: 92,
-                  background: '#FFFFFF',
-                  border: '1.5px solid #18181B',
-                  borderRadius: 6,
-                  padding: 4,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}
-              >
-                <div style={{ flex: 1, background: '#FCEEF3', borderRadius: 3 }} />
-                <div style={{ flex: 1, background: '#EBF4FD', borderRadius: 3 }} />
-                <div style={{ flex: 1, background: '#ECF3ED', borderRadius: 3 }} />
-              </div>
-            </div>
-            <h3 className="heading-h2" style={{ marginBottom: 6 }}>
+            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Strip Klasik 1×3 / 1×4
             </h3>
             <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-              Format strip vertikal ikonik yang keluar langsung dari slot kamera instan.
+              Format strip vertikal ikonik yang keluar langsung dari celah kamera instan.
             </p>
           </div>
 
           <div className="clean-card interactive">
-            <div
-              style={{
-                height: 120,
-                borderRadius: 14,
-                background: '#FAF7F2',
-                border: '1.5px solid #18181B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 20,
-              }}
-            >
-              <div
-                style={{
-                  width: 82,
-                  height: 82,
-                  background: '#FFFFFF',
-                  border: '1.5px solid #18181B',
-                  borderRadius: 8,
-                  padding: 6,
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 5,
-                }}
-              >
-                <div style={{ background: '#FCEEF3', borderRadius: 4 }} />
-                <div style={{ background: '#EBF4FD', borderRadius: 4 }} />
-                <div style={{ background: '#ECF3ED', borderRadius: 4 }} />
-                <div style={{ background: '#FAF7F2', borderRadius: 4 }} />
-              </div>
-            </div>
-            <h3 className="heading-h2" style={{ marginBottom: 6 }}>
+            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Kolase Grid 2×2
             </h3>
             <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-              Cocok untuk 4 pose berpasangan agar ekspresi kalian terlihat seimbang.
+              Cocok untuk 4 pose berpasangan agar ekspresi kalian terlihat berdampingan.
             </p>
           </div>
 
           <div className="clean-card interactive">
-            <div
-              style={{
-                height: 120,
-                borderRadius: 14,
-                background: '#FAF7F2',
-                border: '1.5px solid #18181B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 20,
-              }}
-            >
-              <div
-                style={{
-                  width: 68,
-                  height: 86,
-                  background: '#FFFFFF',
-                  border: '1.5px solid #18181B',
-                  borderRadius: 6,
-                  padding: '6px 6px 18px',
-                }}
-              >
-                <div
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    background: '#EBF4FD',
-                    borderRadius: 3,
-                  }}
-                />
-              </div>
-            </div>
-            <h3 className="heading-h2" style={{ marginBottom: 6 }}>
+            <h3 className="heading-h2" style={{ marginBottom: 8 }}>
               Polaroid Frame
             </h3>
             <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-              Bingkai lebar klasik dengan ruang catatan khusus di bagian bawah foto.
+              Bingkai klasik dengan ruang catatan tanggal dan caption di bagian bawah.
             </p>
           </div>
         </div>
+
+        <div style={{ textAlign: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-lift"
+            onClick={() => navigateTop('studio-features')}
+          >
+            Jelajahi Semua Fitur Studio →
+          </button>
+        </div>
       </section>
 
-      {/* 6. PRIVASI & FAQ ACCORDION (Pill Bars Bersih seperti Lensbooth) */}
-      <section id="privasi" style={{ scrollMarginTop: 90 }}>
+      {/* 5. RINGKASAN PRIVASI & FAQ */}
+      <section>
         <div className="section-header-center">
-          <span className="eyebrow-text">Pertanyaan Umum &amp; Privasi</span>
+          <span className="eyebrow-text">Ringkasan · Privasi &amp; FAQ</span>
           <h2 className="heading-h1" style={{ marginBottom: 12 }}>
-            Ada pertanyaan? Ini jawabannya.
+            Privat sejak awal, <span className="font-upright-serif">tanpa galeri publik</span>.
           </h2>
         </div>
 
-        <div className="faq-list">
+        <div className="faq-list" style={{ marginBottom: 28 }}>
           {FAQ_ITEMS.map((item) => {
             const isOpen = openFaq === item.num;
             return (
@@ -490,9 +382,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             );
           })}
         </div>
+
+        <div style={{ textAlign: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-lift"
+            onClick={() => navigateTop('privacy-info')}
+          >
+            Baca Halaman Privasi Selengkapnya →
+          </button>
+        </div>
       </section>
 
-      {/* 7. SOLID INK FOOTER */}
+      {/* 6. SOLID INK FOOTER */}
       <footer className="solid-footer">
         <div
           style={{
@@ -507,10 +409,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         >
           <div>
             <h2 className="heading-h1" style={{ color: '#FFFFFF', marginBottom: 8 }}>
-              Siap abadikan momenmu hari ini?
+              Siap abadikan <span className="font-upright-serif">momenmu</span> hari ini?
             </h2>
             <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.96rem' }}>
-              Tanpa akun, tanpa watermark paksa, langsung dari browser.
+              Tanpa akun, tanpa galeri publik, langsung dari browser.
             </p>
           </div>
 
@@ -526,7 +428,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <button
               type="button"
               className="btn btn-secondary-pop"
-              onClick={() => onSelectScreen('room')}
+              onClick={() => navigateTop('room')}
             >
               Masuk Room Duo
             </button>
@@ -549,7 +451,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <strong style={{ color: '#FFFFFF' }}>Momentos</strong> — Classic First
             Photobooth (Solo &amp; Duo)
           </span>
-          <span>Sesi Sementara • Unduh PNG &amp; JPG • Tanpa Galeri Publik</span>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
+              onClick={() => navigateTop('how-it-works')}
+            >
+              Cara Kerja
+            </button>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
+              onClick={() => navigateTop('modes-info')}
+            >
+              Mode Solo &amp; Duo
+            </button>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
+              onClick={() => navigateTop('studio-features')}
+            >
+              Fitur Studio
+            </button>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
+              onClick={() => navigateTop('privacy-info')}
+            >
+              Privasi
+            </button>
+          </div>
         </div>
       </footer>
     </div>

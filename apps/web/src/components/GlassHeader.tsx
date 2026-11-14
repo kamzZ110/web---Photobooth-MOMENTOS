@@ -1,91 +1,115 @@
 import React from 'react';
 import type { BoothMode, ScreenId } from '@momentos/shared';
 import { MiniCameraStripIcon } from './InstantCameraRig';
+import { ThemeSwitch } from './ThemeSwitch';
 
 interface GlassHeaderProps {
   activeScreen: ScreenId;
   onSelectScreen: (screen: ScreenId) => void;
   mode: BoothMode;
+  isNight: boolean;
+  onToggleNight: () => void;
 }
 
-const BOOTH_FLOW_TABS: Array<{ id: Exclude<ScreenId, 'home'>; label: string }> = [
-  { id: 'room', label: 'Mode & Room' },
+const CENTER_INFO_PAGES: Array<{ id: ScreenId; label: string }> = [
+  { id: 'how-it-works', label: 'Cara Kerja' },
+  { id: 'modes-info', label: 'Mode Solo & Duo' },
+  { id: 'studio-features', label: 'Fitur Studio' },
+  { id: 'privacy-info', label: 'Privasi' },
+];
+
+const BOOTH_FLOW_TABS: Array<{ id: ScreenId; label: string }> = [
+  { id: 'room', label: 'Room' },
   { id: 'camera', label: 'Kamera' },
   { id: 'review', label: 'Review' },
   { id: 'editor', label: 'Editor' },
   { id: 'export', label: 'Export' },
 ];
 
+const STUDIO_SCREENS: ScreenId[] = ['room', 'camera', 'review', 'editor', 'export'];
+
 export const GlassHeader: React.FC<GlassHeaderProps> = ({
   activeScreen,
   onSelectScreen,
-  mode,
+  isNight,
+  onToggleNight,
 }) => {
-  const isHome = activeScreen === 'home';
+  const isStudioFlow = STUDIO_SCREENS.includes(activeScreen);
 
   return (
     <header className="top-header-full">
       <div className="top-header-inner">
-        {/* Brand Mark (Klik untuk kembali ke Beranda / Landing Page) */}
-        <div
-          className="brand-group"
-          onClick={() => onSelectScreen('home')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') onSelectScreen('home');
-          }}
-        >
-          <MiniCameraStripIcon
-            accentColor={mode === 'duo' ? '#7AB3EF' : '#C93B6B'}
-            size={34}
-          />
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="brand-title">Momentos</span>
-              <span className="brand-badge">Tanpa Login</span>
-            </div>
+        {/* KIRI UJUNG: Brand Momentos */}
+        <div className="header-left">
+          <div
+            className="brand-group"
+            onClick={() => {
+              onSelectScreen('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                onSelectScreen('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }}
+          >
+            <MiniCameraStripIcon size={36} variant={isNight ? 'retro' : 'white'} />
+            <span className="brand-title">Momentos</span>
           </div>
         </div>
 
-        {/* Navigasi Bersih Tanpa Nomor & Tanpa Item "Beranda" */}
-        {isHome ? (
-          <nav className="screen-nav" aria-label="Navigasi Informasi Beranda">
-            <a className="nav-link-clean" href="#cara-kerja">
-              Cara Kerja
-            </a>
-            <a className="nav-link-clean" href="#pilih-mode">
-              Mode Solo &amp; Duo
-            </a>
-            <a className="nav-link-clean" href="#fitur-studio">
-              Fitur Studio
-            </a>
-            <a className="nav-link-clean" href="#privasi">
-              Privasi
-            </a>
+        {/* TENGAH: 4 Tombol Halaman Utama */}
+        <nav className="header-center screen-nav" aria-label="Navigasi Utama">
+          {CENTER_INFO_PAGES.map((page) => (
             <button
+              key={page.id}
               type="button"
-              className="btn btn-primary-pop"
-              style={{ minHeight: 38, padding: '6px 16px', fontSize: '0.84rem' }}
-              onClick={() => onSelectScreen('room')}
+              className={`nav-link-clean ${activeScreen === page.id ? 'active' : ''}`}
+              onClick={() => {
+                onSelectScreen(page.id);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             >
-              Mulai Booth →
+              {page.label}
             </button>
-          </nav>
-        ) : (
-          <nav className="screen-nav" aria-label="Alur Studio Photobooth">
-            {BOOTH_FLOW_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`nav-link-clean ${activeScreen === tab.id ? 'active' : ''}`}
-                onClick={() => onSelectScreen(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        )}
+          ))}
+        </nav>
+
+        {/* KANAN UJUNG: Switch Night Mode + Tombol Mulai Booth */}
+        <div className="header-right">
+          {isStudioFlow && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {BOOTH_FLOW_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`nav-link-clean ${activeScreen === tab.id ? 'active' : ''}`}
+                  style={{ padding: '6px 11px', fontSize: '0.82rem' }}
+                  onClick={() => onSelectScreen(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <ThemeSwitch isNight={isNight} onToggleNight={onToggleNight} />
+
+          <button
+            type="button"
+            className="btn btn-primary-pop"
+            style={{ minHeight: 40, padding: '8px 18px', fontSize: '0.86rem' }}
+            onClick={() => {
+              onSelectScreen('room');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            Mulai Booth →
+          </button>
+        </div>
       </div>
     </header>
   );

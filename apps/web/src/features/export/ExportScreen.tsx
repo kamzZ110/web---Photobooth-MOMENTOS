@@ -12,6 +12,7 @@ import { InstantCameraRig } from '../../components/InstantCameraRig';
 
 interface ExportScreenProps {
   mode: BoothMode;
+  isNight?: boolean;
   takeCount: 3 | 4;
   frames: CapturedFrame[];
   layout: TemplateLayoutId;
@@ -23,6 +24,7 @@ interface ExportScreenProps {
 
 export const ExportScreen: React.FC<ExportScreenProps> = ({
   mode,
+  isNight = false,
   takeCount,
   frames,
   layout,
@@ -87,6 +89,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             <InstantCameraRig
               mode={mode}
+              isNight={isNight}
               badgeText={`FINAL ${layout.toUpperCase()}`}
               caption={caption}
               frames={visibleFrames.map((fr) => ({

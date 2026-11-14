@@ -10,6 +10,7 @@ import { InstantCameraRig } from '../../components/InstantCameraRig';
 
 interface CameraScreenProps {
   mode: BoothMode;
+  isNight?: boolean;
   takeCount: 3 | 4;
   onChangeTakeCount: (count: 3 | 4) => void;
   selectedFilter: PhotoFilterId;
@@ -20,6 +21,7 @@ interface CameraScreenProps {
 
 export const CameraScreen: React.FC<CameraScreenProps> = ({
   mode,
+  isNight = false,
   takeCount,
   onChangeTakeCount,
   selectedFilter,
@@ -345,6 +347,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <InstantCameraRig
                 mode={mode}
+                isNight={isNight}
                 badgeText={`TAKE ${currentShot}/${takeCount}`}
                 caption={`FILTER: ${selectedFilter.toUpperCase()}`}
                 frames={frames.slice(0, takeCount).map((fr) => ({

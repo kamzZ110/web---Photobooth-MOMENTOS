@@ -4,6 +4,7 @@ import { InstantCameraRig } from '../../components/InstantCameraRig';
 
 interface ReviewScreenProps {
   mode: BoothMode;
+  isNight?: boolean;
   takeCount: 3 | 4;
   frames: CapturedFrame[];
   retakesRemaining: number;
@@ -13,6 +14,7 @@ interface ReviewScreenProps {
 
 export const ReviewScreen: React.FC<ReviewScreenProps> = ({
   mode,
+  isNight = false,
   takeCount,
   frames,
   retakesRemaining,
@@ -160,6 +162,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
             <InstantCameraRig
               mode={mode}
+              isNight={isNight}
               badgeText="REVIEW STRIP"
               caption="SIAP MASUK EDITOR"
               frames={visibleFrames.map((fr) => ({

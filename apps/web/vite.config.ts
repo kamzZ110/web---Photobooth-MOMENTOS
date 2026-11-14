@@ -7,10 +7,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@momentos/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@assets': path.resolve(__dirname, '../../assets'),
+      '@fonts': path.resolve(__dirname, '../../font'),
     },
   },
   server: {
     port: 5173,
     open: false,
+    fs: {
+      allow: [path.resolve(__dirname, '../..')],
+    },
   },
 });

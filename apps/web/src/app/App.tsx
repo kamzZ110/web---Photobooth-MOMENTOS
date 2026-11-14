@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   BoothMode,
   CapturedFrame,
@@ -14,6 +14,12 @@ import {
   detectDefaultSeason,
 } from '../components/SeasonalAmbient';
 import { HomeScreen } from '../features/home/HomeScreen';
+import {
+  HowItWorksPage,
+  ModesInfoPage,
+  StudioFeaturesPage,
+  PrivacyInfoPage,
+} from '../features/info/InfoPages';
 import { RoomScreen } from '../features/room/RoomScreen';
 import { CameraScreen } from '../features/camera/CameraScreen';
 import { ReviewScreen } from '../features/classic/ReviewScreen';
@@ -66,9 +72,18 @@ const INITIAL_STICKERS: StickerItem[] = [
   { id: 'st-4', emoji: '📸', label: 'Instant Cam', owner: 'guest', active: false },
 ];
 
+const AMBIENT_SCREENS: ScreenId[] = [
+  'home',
+  'how-it-works',
+  'modes-info',
+  'studio-features',
+  'privacy-info',
+];
+
 export const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('home');
   const [mode, setMode] = useState<BoothMode>('solo');
+  const [isNight, setIsNight] = useState<boolean>(false);
   const [season] = useState(() => detectDefaultSeason());
   const [roomState, setRoomState] = useState<RoomConnectionState>('connected');
   const [takeCount, setTakeCount] = useState<3 | 4>(3);
@@ -77,12 +92,17 @@ export const App: React.FC = () => {
   const [retakesRemaining, setRetakesRemaining] = useState<number>(3);
   const [layout, setLayout] = useState<TemplateLayoutId>('strip-1x4');
   const [stripTint, setStripTint] = useState<string>('#FFFFFF');
-  const [caption, setCaption] = useState<string>('MOMENTOS • NOV 2026');
+  const [caption, setCaption] = useState<string>('Nov 14, 2026 12:02pm');
   const [stickers, setStickers] = useState<StickerItem[]>(INITIAL_STICKERS);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isNight ? 'night' : 'day');
+  }, [isNight]);
 
   const handleStartMode = (nextMode: BoothMode, targetScreen: ScreenId) => {
     setMode(nextMode);
     setActiveScreen(targetScreen);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleRetakeFrame = (frameId: number) => {
@@ -116,18 +136,20 @@ export const App: React.FC = () => {
 
   return (
     <>
-      {/* Latar Dot Bulat Besar Tidak Beraturan + Lebih Gelap & Blur */}
-      <div className="bg-irregular-dots" aria-hidden="true" />
-      <div className="bg-ambient-glow" aria-hidden="true" />
+      {/* Siang: Daun gugur musiman | Malam: Efek bintang-bintang berkelap-kelip (mati saat di Kamera & Editor) */}
+      <SeasonalAmbient
+        season={season}
+        isNight={isNight}
+        enabled={AMBIENT_SCREENS.includes(activeScreen)}
+      />
 
-      {/* Seasonal Falling Leaves / Snow (Otomatis sesuai musim, hanya di Beranda) */}
-      <SeasonalAmbient season={season} enabled={activeScreen === 'home'} />
-
-      {/* Header Edge-to-Edge Translucent Glass */}
+      {/* Header Edge-to-Edge Translucent Glass + Switch Night Mode */}
       <GlassHeader
         activeScreen={activeScreen}
         onSelectScreen={setActiveScreen}
         mode={mode}
+        isNight={isNight}
+        onToggleNight={() => setIsNight((prev) => !prev)}
       />
 
       <div className="app-shell">
@@ -135,6 +157,43 @@ export const App: React.FC = () => {
           {activeScreen === 'home' && (
             <HomeScreen
               mode={mode}
+              isNight={isNight}
+              onStartMode={handleStartMode}
+              onSelectScreen={setActiveScreen}
+            />
+          )}
+
+          {activeScreen === 'how-it-works' && (
+            <HowItWorksPage
+              mode={mode}
+              isNight={isNight}
+              onStartMode={handleStartMode}
+              onSelectScreen={setActiveScreen}
+            />
+          )}
+
+          {activeScreen === 'modes-info' && (
+            <ModesInfoPage
+              mode={mode}
+              isNight={isNight}
+              onStartMode={handleStartMode}
+              onSelectScreen={setActiveScreen}
+            />
+          )}
+
+          {activeScreen === 'studio-features' && (
+            <StudioFeaturesPage
+              mode={mode}
+              isNight={isNight}
+              onStartMode={handleStartMode}
+              onSelectScreen={setActiveScreen}
+            />
+          )}
+
+          {activeScreen === 'privacy-info' && (
+            <PrivacyInfoPage
+              mode={mode}
+              isNight={isNight}
               onStartMode={handleStartMode}
               onSelectScreen={setActiveScreen}
             />
@@ -153,6 +212,7 @@ export const App: React.FC = () => {
           {activeScreen === 'camera' && (
             <CameraScreen
               mode={mode}
+              isNight={isNight}
               takeCount={takeCount}
               onChangeTakeCount={setTakeCount}
               selectedFilter={selectedFilter}
@@ -165,6 +225,7 @@ export const App: React.FC = () => {
           {activeScreen === 'review' && (
             <ReviewScreen
               mode={mode}
+              isNight={isNight}
               takeCount={takeCount}
               frames={frames}
               retakesRemaining={retakesRemaining}
@@ -194,6 +255,7 @@ export const App: React.FC = () => {
           {activeScreen === 'export' && (
             <ExportScreen
               mode={mode}
+              isNight={isNight}
               takeCount={takeCount}
               frames={frames}
               layout={layout}

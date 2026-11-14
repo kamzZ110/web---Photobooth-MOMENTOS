@@ -2,6 +2,10 @@ export type BoothMode = 'solo' | 'duo';
 
 export type ScreenId =
   | 'home'
+  | 'how-it-works'
+  | 'modes-info'
+  | 'studio-features'
+  | 'privacy-info'
   | 'room'
   | 'camera'
   | 'review'
