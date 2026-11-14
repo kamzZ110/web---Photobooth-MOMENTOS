@@ -21,6 +21,7 @@ interface InstantCameraRigProps {
     hostPose: string;
     guestPose?: string;
     bg: string;
+    imageDataUrl?: string;
   }>;
   onTriggerShutter?: () => void;
 }
@@ -214,20 +215,37 @@ export const InstantCameraRig: React.FC<InstantCameraRigProps> = ({
                           background: frame.bg,
                           border: '1px solid rgba(24,24,27,0.2)',
                           borderRadius: 8,
-                          padding: '10px 8px',
+                          padding: frame.imageDataUrl ? 0 : '10px 8px',
+                          overflow: 'hidden',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
+                          minHeight: frame.imageDataUrl ? 72 : undefined,
                         }}
                       >
-                        <span style={{ fontSize: '0.68rem', fontWeight: 400 }}>
-                          {frame.label}
-                        </span>
-                        <span style={{ fontSize: '1.15rem' }}>
-                          {mode === 'duo'
-                            ? `${frame.hostPose} | ${frame.guestPose ?? '😄✨'}`
-                            : frame.hostPose}
-                        </span>
+                        {frame.imageDataUrl ? (
+                          <img
+                            src={frame.imageDataUrl}
+                            alt={frame.label}
+                            style={{
+                              width: '100%',
+                              height: 76,
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                          />
+                        ) : (
+                          <>
+                            <span style={{ fontSize: '0.68rem', fontWeight: 400 }}>
+                              {frame.label}
+                            </span>
+                            <span style={{ fontSize: '1.15rem' }}>
+                              {mode === 'duo'
+                                ? `${frame.hostPose} | ${frame.guestPose ?? '😄✨'}`
+                                : frame.hostPose}
+                            </span>
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>

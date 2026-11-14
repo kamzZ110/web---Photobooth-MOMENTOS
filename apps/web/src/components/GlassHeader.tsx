@@ -24,9 +24,17 @@ const BOOTH_FLOW_TABS: Array<{ id: ScreenId; label: string }> = [
   { id: 'review', label: 'Review' },
   { id: 'editor', label: 'Editor' },
   { id: 'export', label: 'Export' },
+  { id: 'flipbook', label: 'Flipbook ✨' },
 ];
 
-const STUDIO_SCREENS: ScreenId[] = ['room', 'camera', 'review', 'editor', 'export'];
+const STUDIO_SCREENS: ScreenId[] = [
+  'room',
+  'camera',
+  'review',
+  'editor',
+  'export',
+  'flipbook',
+];
 
 export const GlassHeader: React.FC<GlassHeaderProps> = ({
   activeScreen,

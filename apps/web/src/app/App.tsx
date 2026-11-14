@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import type {
-  BoothMode,
-  CapturedFrame,
-  PhotoFilterId,
-  RoomConnectionState,
-  ScreenId,
-  StickerItem,
-  TemplateLayoutId,
+import {
+  DEFAULT_STICKER_LIBRARY,
+  type BoothMode,
+  type CapturedFrame,
+  type PhotoFilterId,
+  type RoomConnectionState,
+  type ScreenId,
+  type StickerItem,
+  type TemplateLayoutId,
 } from '@momentos/shared';
 import { GlassHeader } from '../components/GlassHeader';
 import {
@@ -25,6 +26,7 @@ import { CameraScreen } from '../features/camera/CameraScreen';
 import { ReviewScreen } from '../features/classic/ReviewScreen';
 import { EditorScreen } from '../features/editor/EditorScreen';
 import { ExportScreen } from '../features/export/ExportScreen';
+import { FlipbookScreen } from '../features/flipbook/FlipbookScreen';
 
 const INITIAL_FRAMES: CapturedFrame[] = [
   {
@@ -65,13 +67,6 @@ const INITIAL_FRAMES: CapturedFrame[] = [
   },
 ];
 
-const INITIAL_STICKERS: StickerItem[] = [
-  { id: 'st-1', emoji: '✨', label: 'Sparkle', owner: 'host', active: true },
-  { id: 'st-2', emoji: '🍁', label: 'Maple', owner: 'host', active: false },
-  { id: 'st-3', emoji: '🎀', label: 'Ribbon', owner: 'guest', active: true },
-  { id: 'st-4', emoji: '📸', label: 'Instant Cam', owner: 'guest', active: false },
-];
-
 const AMBIENT_SCREENS: ScreenId[] = [
   'home',
   'how-it-works',
@@ -93,7 +88,7 @@ export const App: React.FC = () => {
   const [layout, setLayout] = useState<TemplateLayoutId>('strip-1x4');
   const [stripTint, setStripTint] = useState<string>('#FFFFFF');
   const [caption, setCaption] = useState<string>('Nov 14, 2026 12:02pm');
-  const [stickers, setStickers] = useState<StickerItem[]>(INITIAL_STICKERS);
+  const [stickers, setStickers] = useState<StickerItem[]>(DEFAULT_STICKER_LIBRARY);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isNight ? 'night' : 'day');
@@ -103,6 +98,19 @@ export const App: React.FC = () => {
     setMode(nextMode);
     setActiveScreen(targetScreen);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCaptureFrame = (frameIndex: number, dataUrl: string) => {
+    setFrames((prev) =>
+      prev.map((f, idx) =>
+        idx === frameIndex
+          ? {
+              ...f,
+              imageDataUrl: dataUrl,
+            }
+          : f
+      )
+    );
   };
 
   const handleRetakeFrame = (frameId: number) => {
@@ -218,6 +226,7 @@ export const App: React.FC = () => {
               selectedFilter={selectedFilter}
               onChangeFilter={setSelectedFilter}
               frames={frames}
+              onCaptureFrame={handleCaptureFrame}
               onNavigate={setActiveScreen}
             />
           )}
@@ -241,6 +250,8 @@ export const App: React.FC = () => {
               frames={frames}
               layout={layout}
               onChangeLayout={setLayout}
+              selectedFilter={selectedFilter}
+              onChangeFilter={setSelectedFilter}
               stripTint={stripTint}
               onChangeStripTint={setStripTint}
               caption={caption}
@@ -252,6 +263,15 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeScreen === 'flipbook' && (
+            <FlipbookScreen
+              mode={mode}
+              selectedFilter={selectedFilter}
+              onChangeFilter={setSelectedFilter}
+              onNavigate={setActiveScreen}
+            />
+          )}
+
           {activeScreen === 'export' && (
             <ExportScreen
               mode={mode}
@@ -259,6 +279,7 @@ export const App: React.FC = () => {
               takeCount={takeCount}
               frames={frames}
               layout={layout}
+              selectedFilter={selectedFilter}
               stripTint={stripTint}
               caption={caption}
               stickers={stickers}

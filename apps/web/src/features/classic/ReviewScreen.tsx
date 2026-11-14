@@ -128,7 +128,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
 
                 <div
                   style={{
-                    height: 150,
+                    height: 170,
                     borderRadius: 14,
                     border: '1.5px solid #18181B',
                     background: frame.accentBg,
@@ -137,11 +137,20 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
                     justifyContent: 'center',
                     fontSize: '2.6rem',
                     marginBottom: 16,
+                    overflow: 'hidden',
                   }}
                 >
-                  {mode === 'duo'
-                    ? `${frame.hostPose} ⚡ ${frame.guestPose}`
-                    : frame.hostPose}
+                  {frame.imageDataUrl ? (
+                    <img
+                      src={frame.imageDataUrl}
+                      alt={frame.label}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : mode === 'duo' ? (
+                    `${frame.hostPose} ⚡ ${frame.guestPose}`
+                  ) : (
+                    frame.hostPose
+                  )}
                 </div>
 
                 <button
@@ -171,6 +180,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
                 hostPose: fr.hostPose,
                 guestPose: fr.guestPose,
                 bg: fr.accentBg,
+                imageDataUrl: fr.imageDataUrl,
               }))}
             />
 

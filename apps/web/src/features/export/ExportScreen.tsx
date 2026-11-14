@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   BoothMode,
   CapturedFrame,
   ExportFormat,
   ExportStatus,
+  PhotoFilterId,
   ScreenId,
   StickerItem,
   TemplateLayoutId,
 } from '@momentos/shared';
 import { InstantCameraRig } from '../../components/InstantCameraRig';
+import {
+  renderClassicCompositeDataUrl,
+  triggerFileDownload,
+} from '../../lib/mediaEngine';
 
 interface ExportScreenProps {
   mode: BoothMode;
@@ -16,6 +21,7 @@ interface ExportScreenProps {
   takeCount: 3 | 4;
   frames: CapturedFrame[];
   layout: TemplateLayoutId;
+  selectedFilter: PhotoFilterId;
   stripTint: string;
   caption: string;
   stickers: StickerItem[];
@@ -28,6 +34,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
   takeCount,
   frames,
   layout,
+  selectedFilter,
   stripTint,
   caption,
   stickers,
@@ -35,28 +42,68 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
 }) => {
   const [format, setFormat] = useState<ExportFormat>('png');
   const [status, setStatus] = useState<ExportStatus>('idle');
+  const [previewDataUrl, setPreviewDataUrl] = useState<string>('');
 
   const visibleFrames = frames.slice(0, takeCount);
   const activeStickers = stickers.filter((s) => s.active);
 
-  const handleDownloadSimulation = () => {
+  useEffect(() => {
+    let active = true;
+    renderClassicCompositeDataUrl({
+      mode,
+      frames: visibleFrames,
+      layout,
+      stripTint,
+      selectedFilter,
+      caption,
+      stickers,
+      format,
+    })
+      .then((url) => {
+        if (active) setPreviewDataUrl(url);
+      })
+      .catch(() => {
+        // Keep previous preview if transient
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [mode, takeCount, frames, layout, selectedFilter, stripTint, caption, stickers, format]);
+
+  const handleRealDownload = async () => {
     setStatus('rendering');
-    window.setTimeout(() => {
+    try {
+      const url = await renderClassicCompositeDataUrl({
+        mode,
+        frames: visibleFrames,
+        layout,
+        stripTint,
+        selectedFilter,
+        caption,
+        stickers,
+        format,
+      });
+      setPreviewDataUrl(url);
+      triggerFileDownload(url, `momentos-${mode}-${layout}.${format}`);
       setStatus('success');
-    }, 650);
+    } catch {
+      setStatus('error');
+    }
   };
 
   return (
     <div className="page-stack">
       <section>
         <div className="page-intro">
-          <span className="eyebrow-text">Final Preview &amp; Export</span>
+          <span className="eyebrow-text">Final Canvas 2D Render &amp; Export</span>
           <h1 className="heading-h1" style={{ marginBottom: 12 }}>
             Cetak dan unduh hasil photobooth-mu.
           </h1>
           <p className="text-muted">
-            Pilih format PNG tanpa kompresi atau JPG ringan, lalu simpan langsung ke
-            perangkat masing-masing.
+            Hasil dirender langsung menggunakan Canvas 2D resolusi tinggi sesuai template{' '}
+            <strong>{layout}</strong>, filter <strong>{selectedFilter}</strong>, dan stiker
+            aktif.
           </p>
         </div>
 
@@ -85,22 +132,43 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
         </div>
 
         <div className="grid-2" style={{ alignItems: 'center' }}>
-          {/* Kamera Mencetak Strip Final Terbuka */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <InstantCameraRig
-              mode={mode}
-              isNight={isNight}
-              badgeText={`FINAL ${layout.toUpperCase()}`}
-              caption={caption}
-              frames={visibleFrames.map((fr) => ({
-                id: fr.id,
-                label: fr.label,
-                hostPose: fr.hostPose,
-                guestPose: fr.guestPose,
-                bg: stripTint === '#FFFFFF' ? fr.accentBg : stripTint,
-              }))}
-              onTriggerShutter={handleDownloadSimulation}
-            />
+          {/* Pratinjau Hasil Canvas 2D Nyata + Kamera */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            {previewDataUrl ? (
+              <div
+                style={{
+                  background: '#FFFFFF',
+                  padding: 16,
+                  borderRadius: 20,
+                  border: '1.5px solid #18181B',
+                  boxShadow: '6px 6px 0px #18181B',
+                  maxWidth: 340,
+                }}
+              >
+                <img
+                  src={previewDataUrl}
+                  alt="Pratinjau Hasil Render Canvas 2D"
+                  style={{ width: '100%', height: 'auto', borderRadius: 10, display: 'block' }}
+                />
+              </div>
+            ) : (
+              <InstantCameraRig
+                mode={mode}
+                isNight={isNight}
+                badgeText={`FINAL ${layout.toUpperCase()}`}
+                caption={caption}
+                frames={visibleFrames.map((fr) => ({
+                  id: fr.id,
+                  label: fr.label,
+                  hostPose: fr.hostPose,
+                  guestPose: fr.guestPose,
+                  bg: stripTint === '#FFFFFF' ? fr.accentBg : stripTint,
+                  imageDataUrl: fr.imageDataUrl,
+                }))}
+                onTriggerShutter={handleRealDownload}
+              />
+            )}
+
             {activeStickers.length > 0 && (
               <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#52525B' }}>
                 Stiker terpasang: {activeStickers.map((s) => s.emoji).join(' ')}
@@ -112,11 +180,11 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
           <div className="clean-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
               <h2 className="heading-h2" style={{ marginBottom: 8 }}>
-                Pilih Format Unduhan
+                Pilih Format Unduhan Nyata
               </h2>
               <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-                Host dan Guest sama-sama bisa mengunduh salinan final resolusi penuh ke
-                perangkatnya masing-masing.
+                Klik tombol di bawah untuk mengunduh file gambar asli langsung dari browser ke
+                perangkatmu.
               </p>
             </div>
 
@@ -127,7 +195,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                 style={{ flex: 1 }}
                 onClick={() => setFormat('png')}
               >
-                Format PNG
+                Format PNG (Tajam)
               </button>
               <button
                 type="button"
@@ -135,7 +203,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                 style={{ flex: 1 }}
                 onClick={() => setFormat('jpg')}
               >
-                Format JPG
+                Format JPG (Ringan)
               </button>
             </div>
 
@@ -149,7 +217,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                   fontWeight: 700,
                 }}
               >
-                ⏳ Menyiapkan snapshot .{format.toUpperCase()}...
+                ⏳ Merender Canvas 2D ke .{format.toUpperCase()}...
               </div>
             )}
 
@@ -163,7 +231,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                   fontWeight: 700,
                 }}
               >
-                ✅ File <code>momentos-{mode}-strip.{format}</code> siap disimpan!
+                ✅ File <code>momentos-{mode}-{layout}.{format}</code> berhasil diunduh!
               </div>
             )}
 
@@ -177,8 +245,8 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                   fontWeight: 700,
                 }}
               >
-                ⚠️ Gagal merender ekspor. Klik tombol di bawah untuk mengulangi tanpa
-                kehilangan hasil editmu.
+                ⚠️ Gagal merender ekspor. Klik tombol di bawah untuk mengulangi tanpa kehilangan
+                hasil editmu.
               </div>
             )}
 
@@ -187,7 +255,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
               className="btn btn-primary-pop"
               style={{ minHeight: 54, fontSize: '1rem' }}
               disabled={status === 'rendering'}
-              onClick={handleDownloadSimulation}
+              onClick={handleRealDownload}
             >
               {status === 'error'
                 ? `🔄 Coba Unduh Ulang (.${format.toUpperCase()})`
@@ -232,8 +300,8 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
               Tanpa Public Share Link
             </h3>
             <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-              Kami tidak membuat tautan publik permanen atau galeri online. Pastikan
-              kamu sudah mengunduh foto sebelum menutup tab browser.
+              Kami tidak membuat tautan publik permanen atau galeri online. Pastikan kamu sudah
+              mengunduh foto sebelum menutup tab browser.
             </p>
           </div>
 
@@ -245,8 +313,8 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
               Siap Cetak Fisik
             </h3>
             <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-              Format PNG menjaga detail warna tetap tajam bila kamu ingin mencetak
-              strip foto di printer rumah atau cetak foto instan.
+              Format PNG menjaga detail warna tetap tajam bila kamu ingin mencetak strip foto
+              di printer rumah atau cetak foto instan.
             </p>
           </div>
         </div>

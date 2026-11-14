@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 620" width="920" height="620">
+  <defs>
+    <filter id="bookShadow" x="-6%" y="-6%" width="114%" height="116%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#1E1714" flood-opacity="0.16" />
+    </filter>
+    <linearGradient id="ringMetal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E7E2DC" />
+      <stop offset="50%" stop-color="#8C837A" />
+      <stop offset="100%" stop-color="#3E3833" />
+    </linearGradient>
+  </defs>
+
+  <!-- Stacked Flipbook Paper Depth Layers (Right Thumb Edge) -->
+  <g filter="url(#bookShadow)">
+    <rect x="66" y="42" width="816" height="536" rx="20" fill="#DDD2C2" />
+    <rect x="58" y="36" width="816" height="536" rx="20" fill="#EBE2D5" />
+    <rect x="50" y="30" width="816" height="536" rx="20" fill="#FBF7EF" stroke="#D9CEBF" stroke-width="2" />
+  </g>
+
+  <!-- Left Spine Shadow & Spiral Binding Rings -->
+  <rect x="50" y="30" width="54" height="536" rx="18" fill="#F2EAE0" />
+  <line x1="104" y1="30" x2="104" y2="566" stroke="#D8CCB9" stroke-width="2" />
+  <g>
+    <!-- 8 Metallic Binding Rings -->
+    <g transform="translate(26, 76)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 138)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 200)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 262)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 324)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 386)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 448)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+    <g transform="translate(26, 510)"><circle cx="48" cy="12" r="9" fill="#3A322D" /><rect x="0" y="4" width="52" height="16" rx="8" fill="url(#ringMetal)" /></g>
+  </g>
+
+  <!-- Main Animated Motion Frame Aperture -->
+  <rect x="132" y="64" width="620" height="420" rx="14" fill="#EFE8DC" stroke="#CFC2B0" stroke-width="2" />
+  <text x="442" y="276" text-anchor="middle" font-family="'Plus Jakarta Sans', sans-serif" font-size="22" font-weight="600" fill="#7D6C5E">MOTION CANVAS (30 FRAMES @ 10 FPS)</text>
+
+  <!-- Right Thumb Index Tab (Physical Flipbook Detail) -->
+  <path d="M 780 96 L 866 96 L 866 490 L 780 490 Z" fill="none" stroke="#E0D4C2" stroke-width="1.5" stroke-dasharray="6 6" />
+  <text x="822" y="294" text-anchor="middle" font-family="monospace" font-size="14" font-weight="700" fill="#BC4374" transform="rotate(-90 822 294)">THUMB FLIP ZONE • PAGE 01/30</text>
+
+  <!-- Aesthetic Registration Footer -->
+  <text x="132" y="528" font-family="Georgia, serif" font-size="24" font-style="italic" fill="#2A1F1D">Momentos Flipbook Studio</text>
+  <rect x="572" y="504" width="180" height="32" rx="16" fill="#BC4374" />
+  <text x="662" y="525" text-anchor="middle" font-family="monospace" font-size="13" font-weight="700" fill="#FFFFFF">FRM 01/30 • 3.0s</text>
+</svg>

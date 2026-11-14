@@ -121,6 +121,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           >
             👩‍💻🧑‍💻 Mulai Mode Duo
           </button>
+
+          <button
+            type="button"
+            className="btn btn-lift"
+            style={{ minHeight: 52, padding: '12px 24px', fontSize: '0.98rem' }}
+            onClick={() => onStartMode('solo', 'flipbook')}
+          >
+            🎞️ Coba Mode Flipbook
+          </button>
         </div>
 
         <div

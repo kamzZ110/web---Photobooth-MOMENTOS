@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 1800" width="600" height="1800">
+  <!-- Matte Charcoal 35mm Film Strip Base -->
+  <rect x="16" y="16" width="568" height="1768" rx="14" fill="#181619" stroke="#322E34" stroke-width="3" />
+
+  <!-- Top Film Metadata -->
+  <text x="92" y="64" font-family="monospace" font-size="16" font-weight="700" fill="#E09F5A" letter-spacing="3">MOMENTOS GC 400-8</text>
+  <text x="508" y="64" text-anchor="end" font-family="monospace" font-size="16" font-weight="700" fill="#E09F5A">SAFETY FILM</text>
+
+  <!-- Left & Right Sprocket Holes Loop -->
+  <g fill="#F4F1EC">
+    <!-- Left sprockets -->
+    <rect x="34" y="96" width="28" height="40" rx="5" /><rect x="34" y="168" width="28" height="40" rx="5" />
+    <rect x="34" y="240" width="28" height="40" rx="5" /><rect x="34" y="312" width="28" height="40" rx="5" />
+    <rect x="34" y="384" width="28" height="40" rx="5" /><rect x="34" y="456" width="28" height="40" rx="5" />
+    <rect x="34" y="528" width="28" height="40" rx="5" /><rect x="34" y="600" width="28" height="40" rx="5" />
+    <rect x="34" y="672" width="28" height="40" rx="5" /><rect x="34" y="744" width="28" height="40" rx="5" />
+    <rect x="34" y="816" width="28" height="40" rx="5" /><rect x="34" y="888" width="28" height="40" rx="5" />
+    <rect x="34" y="960" width="28" height="40" rx="5" /><rect x="34" y="1032" width="28" height="40" rx="5" />
+    <rect x="34" y="1104" width="28" height="40" rx="5" /><rect x="34" y="1176" width="28" height="40" rx="5" />
+    <rect x="34" y="1248" width="28" height="40" rx="5" /><rect x="34" y="1320" width="28" height="40" rx="5" />
+    <rect x="34" y="1392" width="28" height="40" rx="5" /><rect x="34" y="1464" width="28" height="40" rx="5" />
+    <rect x="34" y="1536" width="28" height="40" rx="5" /><rect x="34" y="1608" width="28" height="40" rx="5" />
+    <!-- Right sprockets -->
+    <rect x="538" y="96" width="28" height="40" rx="5" /><rect x="538" y="168" width="28" height="40" rx="5" />
+    <rect x="538" y="240" width="28" height="40" rx="5" /><rect x="538" y="312" width="28" height="40" rx="5" />
+    <rect x="538" y="384" width="28" height="40" rx="5" /><rect x="538" y="456" width="28" height="40" rx="5" />
+    <rect x="538" y="528" width="28" height="40" rx="5" /><rect x="538" y="600" width="28" height="40" rx="5" />
+    <rect x="538" y="672" width="28" height="40" rx="5" /><rect x="538" y="744" width="28" height="40" rx="5" />
+    <rect x="538" y="816" width="28" height="40" rx="5" /><rect x="538" y="888" width="28" height="40" rx="5" />
+    <rect x="538" y="960" width="28" height="40" rx="5" /><rect x="538" y="1032" width="28" height="40" rx="5" />
+    <rect x="538" y="1104" width="28" height="40" rx="5" /><rect x="538" y="1176" width="28" height="40" rx="5" />
+    <rect x="538" y="1248" width="28" height="40" rx="5" /><rect x="538" y="1320" width="28" height="40" rx="5" />
+    <rect x="538" y="1392" width="28" height="40" rx="5" /><rect x="538" y="1464" width="28" height="40" rx="5" />
+    <rect x="538" y="1536" width="28" height="40" rx="5" /><rect x="538" y="1608" width="28" height="40" rx="5" />
+  </g>
+
+  <!-- 4 Negative Frames + Amber Edge Numbers -->
+  <text x="92" y="110" font-family="monospace" font-size="14" font-weight="700" fill="#E09F5A">▶ 01A</text>
+  <rect x="92" y="124" width="416" height="312" rx="6" fill="#2A262B" stroke="#E09F5A" stroke-width="1.5" stroke-opacity="0.45" />
+  <text x="300" y="286" text-anchor="middle" font-family="monospace" font-size="16" fill="#A89F96">FRAME 01A • 35MM</text>
+
+  <text x="92" y="476" font-family="monospace" font-size="14" font-weight="700" fill="#E09F5A">▶ 02A</text>
+  <rect x="92" y="490" width="416" height="312" rx="6" fill="#2A262B" stroke="#E09F5A" stroke-width="1.5" stroke-opacity="0.45" />
+  <text x="300" y="652" text-anchor="middle" font-family="monospace" font-size="16" fill="#A89F96">FRAME 02A • 35MM</text>
+
+  <text x="92" y="842" font-family="monospace" font-size="14" font-weight="700" fill="#E09F5A">▶ 03A</text>
+  <rect x="92" y="856" width="416" height="312" rx="6" fill="#2A262B" stroke="#E09F5A" stroke-width="1.5" stroke-opacity="0.45" />
+  <text x="300" y="1018" text-anchor="middle" font-family="monospace" font-size="16" fill="#A89F96">FRAME 03A • 35MM</text>
+
+  <text x="92" y="1208" font-family="monospace" font-size="14" font-weight="700" fill="#E09F5A">▶ 04A</text>
+  <rect x="92" y="1222" width="416" height="312" rx="6" fill="#2A262B" stroke="#E09F5A" stroke-width="1.5" stroke-opacity="0.45" />
+  <text x="300" y="1384" text-anchor="middle" font-family="monospace" font-size="16" fill="#A89F96">FRAME 04A • 35MM</text>
+
+  <!-- Film Roll Footer -->
+  <text x="300" y="1688" text-anchor="middle" font-family="'Plus Jakarta Sans', sans-serif" font-size="26" font-weight="700" letter-spacing="6" fill="#FAF3EA">MOMENTOS 35MM</text>
+  <text x="300" y="1724" text-anchor="middle" font-family="monospace" font-size="14" fill="#E09F5A">ISO 400 • COLOR NEGATIVE ARCHIVE</text>
+</svg>
