@@ -19,16 +19,16 @@ const CENTER_INFO_PAGES: Array<{ id: ScreenId; label: string }> = [
 ];
 
 const BOOTH_FLOW_TABS: Array<{ id: ScreenId; label: string }> = [
-  { id: 'room', label: 'Room' },
-  { id: 'camera', label: 'Kamera' },
-  { id: 'review', label: 'Review' },
-  { id: 'editor', label: 'Editor' },
-  { id: 'export', label: 'Export' },
+  { id: 'room', label: '01. Mode' },
+  { id: 'frame-select', label: '02. Frame' },
+  { id: 'camera', label: '03. Kamera' },
+  { id: 'editor', label: '04. Hasil & Edit' },
   { id: 'flipbook', label: 'Flipbook ✨' },
 ];
 
 const STUDIO_SCREENS: ScreenId[] = [
   'room',
+  'frame-select',
   'camera',
   'review',
   'editor',

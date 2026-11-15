@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import type { BoothMode, CapturedFrame, ScreenId } from '@momentos/shared';
 import { InstantCameraRig } from '../../components/InstantCameraRig';
+import {
+  realtimeClient,
+  type RealtimeClientState,
+} from '../../lib/realtimeClient';
 
 interface ReviewScreenProps {
   mode: BoothMode;
@@ -9,6 +13,7 @@ interface ReviewScreenProps {
   frames: CapturedFrame[];
   retakesRemaining: number;
   onRetakeFrame: (frameId: number) => void;
+  realtimeState?: RealtimeClientState;
   onNavigate: (screen: ScreenId) => void;
 }
 
@@ -19,6 +24,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
   frames,
   retakesRemaining,
   onRetakeFrame,
+  realtimeState,
   onNavigate,
 }) => {
   const [guestRetakeRequestFrame, setGuestRetakeRequestFrame] = useState<number | null>(
@@ -26,39 +32,49 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
   );
 
   const visibleFrames = frames.slice(0, takeCount);
+  const livePrompt = realtimeState?.snapshot?.retakePrompt;
+  const activeRole = realtimeState?.role ?? 'host';
+
+  const effectivePromptFrame =
+    livePrompt && livePrompt.status === 'pending'
+      ? livePrompt.frameId
+      : guestRetakeRequestFrame;
 
   return (
     <div className="page-stack">
       <section>
         {/* Centered Clean Intro */}
         <div className="page-intro">
-          <span className="eyebrow-text">Review &amp; Retake</span>
+          <span className="eyebrow-text">Review &amp; Retake (Tahap 5)</span>
           <h1 className="heading-h1" style={{ marginBottom: 12 }}>
             Periksa setiap pose sebelum masuk ke Editor.
           </h1>
           <p className="text-muted">
-            Kuota retake tersisa: <strong>{retakesRemaining} dari 3</strong>. Pilih
-            pose yang ingin diulang jika masih ada yang kurang pas.
+            Kuota retake tersisa: <strong>{retakesRemaining} dari 3</strong>. Pada Mode Duo,
+            foto Host (kiri) dan Guest (kanan) disatukan otomatis di setiap frame.
           </p>
         </div>
 
-        {mode === 'duo' && guestRetakeRequestFrame === null && (
+        {mode === 'duo' && effectivePromptFrame === null && (
           <div className="demo-state-strip">
             <button
               type="button"
               className="btn btn-lift"
               style={{ minHeight: 32, padding: '4px 12px', fontSize: '0.76rem' }}
-              onClick={() => setGuestRetakeRequestFrame(2)}
+              onClick={() => {
+                setGuestRetakeRequestFrame(2);
+                realtimeClient.requestRetake(2);
+              }}
             >
-              Simulasikan Guest Minta Retake Pose #2
+              🙋 Simulasikan Guest Minta Retake Pose #2
             </button>
           </div>
         )}
 
         {/* Banner Persetujuan Host saat Guest Meminta Retake di Mode Duo */}
-        {mode === 'duo' && guestRetakeRequestFrame !== null && (
+        {mode === 'duo' && effectivePromptFrame !== null && (
           <div
-            className="clean-card"
+            className="clean-card surface-light"
             style={{
               background: '#EBF4FD',
               marginBottom: 28,
@@ -71,10 +87,10 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
           >
             <div>
               <span className="eyebrow-text" style={{ marginBottom: 4 }}>
-                Permintaan Retake Guest
+                Permintaan Retake Guest (Real-Time Sync)
               </span>
               <h3 className="heading-h2">
-                Guest (Nadia) ingin mengulang Pose #{guestRetakeRequestFrame}
+                Guest ingin mengulang Pose #{effectivePromptFrame}
               </h3>
             </div>
 
@@ -84,7 +100,10 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
                 className="btn btn-primary-pop"
                 disabled={retakesRemaining <= 0}
                 onClick={() => {
-                  onRetakeFrame(guestRetakeRequestFrame);
+                  if (livePrompt) {
+                    realtimeClient.decideRetake(livePrompt.requestId, true);
+                  }
+                  onRetakeFrame(effectivePromptFrame);
                   setGuestRetakeRequestFrame(null);
                 }}
               >
@@ -93,7 +112,12 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
               <button
                 type="button"
                 className="btn btn-lift"
-                onClick={() => setGuestRetakeRequestFrame(null)}
+                onClick={() => {
+                  if (livePrompt) {
+                    realtimeClient.decideRetake(livePrompt.requestId, false);
+                  }
+                  setGuestRetakeRequestFrame(null);
+                }}
               >
                 Tolak
               </button>
@@ -127,7 +151,9 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
                 </div>
 
                 <div
+                  className="surface-light"
                   style={{
+                    position: 'relative',
                     height: 170,
                     borderRadius: 14,
                     border: '1.5px solid #18181B',
@@ -140,7 +166,61 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
                     overflow: 'hidden',
                   }}
                 >
-                  {frame.imageDataUrl ? (
+                  {mode === 'duo' && frame.imageDataUrl && frame.guestImageDataUrl ? (
+                    <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                      <div style={{ position: 'relative', width: '50%', height: '100%' }}>
+                        <img
+                          src={frame.imageDataUrl}
+                          alt={`${frame.label} Host`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: 6,
+                            left: 6,
+                            background: 'rgba(24,24,27,0.75)',
+                            color: '#FFFFFF',
+                            fontSize: '0.62rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: 999,
+                          }}
+                        >
+                          HOST
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          position: 'relative',
+                          width: '50%',
+                          height: '100%',
+                          borderLeft: '2px solid rgba(255,255,255,0.8)',
+                        }}
+                      >
+                        <img
+                          src={frame.guestImageDataUrl}
+                          alt={`${frame.label} Guest`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: 6,
+                            right: 6,
+                            background: 'rgba(24,24,27,0.75)',
+                            color: '#FFFFFF',
+                            fontSize: '0.62rem',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: 999,
+                          }}
+                        >
+                          GUEST
+                        </span>
+                      </div>
+                    </div>
+                  ) : frame.imageDataUrl ? (
                     <img
                       src={frame.imageDataUrl}
                       alt={frame.label}
@@ -158,11 +238,21 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
                   className="btn btn-lift"
                   style={{ width: '100%' }}
                   disabled={retakesRemaining <= 0}
-                  onClick={() => onRetakeFrame(frame.id)}
+                  onClick={() => {
+                    if (mode === 'duo' && activeRole === 'guest') {
+                      realtimeClient.requestRetake(frame.id);
+                      setGuestRetakeRequestFrame(frame.id);
+                    } else {
+                      realtimeClient.requestRetake(frame.id);
+                      onRetakeFrame(frame.id);
+                    }
+                  }}
                 >
-                  {retakesRemaining > 0
-                    ? `Foto Ulang ${frame.label}`
-                    : 'Kuota Retake Habis'}
+                  {retakesRemaining <= 0
+                    ? 'Kuota Retake Habis'
+                    : mode === 'duo' && activeRole === 'guest'
+                    ? `Ajukan Retake ${frame.label} ke Host`
+                    : `Foto Ulang ${frame.label}`}
                 </button>
               </div>
             ))}
@@ -204,7 +294,7 @@ export const ReviewScreen: React.FC<ReviewScreenProps> = ({
         </div>
       </section>
 
-      {/* Aturan Retake (Menjaga halaman panjang & informatif) */}
+      {/* Aturan Retake */}
       <section>
         <div className="section-header-center">
           <span className="eyebrow-text">Aturan Retake</span>

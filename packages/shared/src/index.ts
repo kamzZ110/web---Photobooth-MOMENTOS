@@ -7,6 +7,7 @@ export type ScreenId =
   | 'studio-features'
   | 'privacy-info'
   | 'room'
+  | 'frame-select'
   | 'camera'
   | 'review'
   | 'editor'
@@ -380,3 +381,217 @@ export const FLIPBOOK_PRESETS: FlipbookPreset[] = [
     guidedPrompts: ['1. Ekspresi misterius', '2. Tertawa seperti film bisu', '3. Hormat perpisahan'],
   },
 ];
+
+/* ============================================================================
+ * Tahap 4 — Realtime Room, Signaling & Synchronization Contracts
+ * ==========================================================================*/
+
+export type ParticipantRole = 'host' | 'guest';
+
+export type RoomSessionPhase =
+  | 'waiting'
+  | 'setup'
+  | 'ready'
+  | 'countdown'
+  | 'capturing'
+  | 'syncing'
+  | 'review'
+  | 'editing'
+  | 'export'
+  | 'ended';
+
+export interface RoomParticipant {
+  participantId: string;
+  role: ParticipantRole;
+  displayName: string;
+  connected: boolean;
+  ready: boolean;
+  lastSeenAt: number;
+  rejoinExpiresAt: number | null;
+}
+
+export interface ScheduledCountdown {
+  attemptId: string;
+  takeNumber: number;
+  startedAtServer: number;
+  targetCaptureAtServer: number;
+  durationMs: number;
+}
+
+export interface RetakePromptState {
+  requestId: string;
+  frameId: number;
+  requestedBy: ParticipantRole;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface SyncedFrameMedia {
+  frameIndex: number;
+  hostDataUrl?: string;
+  guestDataUrl?: string;
+  updatedAt: number;
+}
+
+export interface EditorOperation {
+  opId: string;
+  actor: ParticipantRole;
+  timestamp: number;
+  kind: 'toggle-sticker' | 'set-tint' | 'set-caption' | 'set-layout' | 'set-filter';
+  stickerId?: string;
+  prevActive?: boolean;
+  nextActive?: boolean;
+  prevValue?: string;
+  nextValue?: string;
+}
+
+export interface CollaborativeEditorState {
+  editorVersion: number;
+  stripTint: string;
+  caption: string;
+  stickers: StickerItem[];
+  history: EditorOperation[];
+  pausedByDisconnect: boolean;
+  lastActor: ParticipantRole | null;
+}
+
+export interface AuthoritativeRoomSnapshot {
+  code: string;
+  version: number;
+  mode: BoothMode;
+  phase: RoomSessionPhase;
+  connectionState: RoomConnectionState;
+  createdAt: number;
+  expiresAt: number;
+  idleDestroyAt: number | null;
+  takeCount: 3 | 4;
+  selectedFilter: PhotoFilterId;
+  layout: TemplateLayoutId;
+  retakesRemaining: number;
+  participants: RoomParticipant[];
+  countdown: ScheduledCountdown | null;
+  retakePrompt: RetakePromptState | null;
+  syncedFrames: SyncedFrameMedia[];
+  editorState: CollaborativeEditorState;
+}
+
+export interface WebRtcSignalPayload {
+  kind: 'offer' | 'answer' | 'ice';
+  sdp?: string;
+  candidate?: Record<string, unknown>;
+}
+
+export type ClientToServerMessage =
+  | {
+      type: 'room:create';
+      displayName?: string;
+      mode?: BoothMode;
+      takeCount?: 3 | 4;
+      selectedFilter?: PhotoFilterId;
+    }
+  | {
+      type: 'room:join';
+      code: string;
+      displayName?: string;
+    }
+  | {
+      type: 'room:rejoin';
+      code: string;
+      rejoinToken: string;
+    }
+  | {
+      type: 'room:leave';
+    }
+  | {
+      type: 'participant:ready';
+      ready: boolean;
+    }
+  | {
+      type: 'session:config';
+      takeCount?: 3 | 4;
+      selectedFilter?: PhotoFilterId;
+      layout?: TemplateLayoutId;
+      phase?: RoomSessionPhase;
+    }
+  | {
+      type: 'clock:ping';
+      clientSentAt: number;
+    }
+  | {
+      type: 'capture:request';
+      takeNumber: number;
+    }
+  | {
+      type: 'capture:ack';
+      attemptId: string;
+    }
+  | {
+      type: 'capture:frame-sync';
+      frameIndex: number;
+      dataUrl: string;
+    }
+  | {
+      type: 'retake:request';
+      frameId: number;
+    }
+  | {
+      type: 'retake:decision';
+      requestId: string;
+      approved: boolean;
+    }
+  | {
+      type: 'editor:operation';
+      opId: string;
+      kind: 'toggle-sticker' | 'set-tint' | 'set-caption';
+      stickerId?: string;
+      value?: string;
+    }
+  | {
+      type: 'editor:personal-undo';
+      actor?: ParticipantRole;
+    }
+  | {
+      type: 'webrtc:signal';
+      signal: WebRtcSignalPayload;
+    };
+
+export type ServerToClientMessage =
+  | {
+      type: 'room:joined';
+      code: string;
+      role: ParticipantRole;
+      participantId: string;
+      rejoinToken: string;
+      snapshot: AuthoritativeRoomSnapshot;
+    }
+  | {
+      type: 'room:snapshot';
+      snapshot: AuthoritativeRoomSnapshot;
+    }
+  | {
+      type: 'clock:pong';
+      clientSentAt: number;
+      serverReceivedAt: number;
+      serverSentAt: number;
+    }
+  | {
+      type: 'capture:scheduled';
+      countdown: ScheduledCountdown;
+      snapshot: AuthoritativeRoomSnapshot;
+    }
+  | {
+      type: 'webrtc:signal';
+      fromRole: ParticipantRole;
+      signal: WebRtcSignalPayload;
+    }
+  | {
+      type: 'room:error';
+      errorCode:
+        | 'ROOM_NOT_FOUND'
+        | 'ROOM_FULL'
+        | 'INVALID_TOKEN'
+        | 'FORBIDDEN_ROLE'
+        | 'NOT_READY'
+        | 'ROOM_ENDED'
+        | 'BAD_REQUEST';
+      message: string;
+    };

@@ -108,7 +108,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             type="button"
             className="btn btn-primary-pop"
             style={{ minHeight: 52, padding: '12px 28px', fontSize: '0.98rem' }}
-            onClick={() => onStartMode('solo', 'camera')}
+            onClick={() => onStartMode('solo', 'frame-select')}
           >
             📸 Mulai Mode Solo
           </button>
@@ -261,7 +261,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               type="button"
               className="btn btn-primary-pop"
               style={{ width: '100%' }}
-              onClick={() => onStartMode('solo', 'camera')}
+              onClick={() => onStartMode('solo', 'frame-select')}
             >
               Mulai Sesi Solo →
             </button>
@@ -430,7 +430,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               type="button"
               className="btn btn-primary-pop"
               style={{ borderColor: '#FFFFFF' }}
-              onClick={() => onStartMode('solo', 'camera')}
+              onClick={() => onStartMode('solo', 'frame-select')}
             >
               Mulai Solo →
             </button>

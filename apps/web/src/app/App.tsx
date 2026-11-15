@@ -22,11 +22,16 @@ import {
   PrivacyInfoPage,
 } from '../features/info/InfoPages';
 import { RoomScreen } from '../features/room/RoomScreen';
+import { FrameSelectScreen } from '../features/classic/FrameSelectScreen';
 import { CameraScreen } from '../features/camera/CameraScreen';
 import { ReviewScreen } from '../features/classic/ReviewScreen';
 import { EditorScreen } from '../features/editor/EditorScreen';
 import { ExportScreen } from '../features/export/ExportScreen';
 import { FlipbookScreen } from '../features/flipbook/FlipbookScreen';
+import {
+  realtimeClient,
+  type RealtimeClientState,
+} from '../lib/realtimeClient';
 
 const INITIAL_FRAMES: CapturedFrame[] = [
   {
@@ -89,10 +94,48 @@ export const App: React.FC = () => {
   const [stripTint, setStripTint] = useState<string>('#FFFFFF');
   const [caption, setCaption] = useState<string>('Nov 14, 2026 12:02pm');
   const [stickers, setStickers] = useState<StickerItem[]>(DEFAULT_STICKER_LIBRARY);
+  const [realtimeState, setRealtimeState] = useState<RealtimeClientState>(() =>
+    realtimeClient.getState()
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isNight ? 'night' : 'day');
   }, [isNight]);
+
+  useEffect(() => {
+    return realtimeClient.subscribe((next) => {
+      setRealtimeState(next);
+      if (next.snapshot) {
+        setRoomState(next.snapshot.connectionState);
+        setTakeCount(next.snapshot.takeCount);
+        setSelectedFilter(next.snapshot.selectedFilter);
+        setLayout(next.snapshot.layout);
+        setRetakesRemaining(next.snapshot.retakesRemaining);
+
+        if (next.snapshot.syncedFrames && next.snapshot.syncedFrames.length > 0) {
+          setFrames((prev) =>
+            prev.map((fr, idx) => {
+              const synced = next.snapshot?.syncedFrames.find(
+                (sf) => sf.frameIndex === idx
+              );
+              if (!synced) return fr;
+              return {
+                ...fr,
+                imageDataUrl: synced.hostDataUrl ?? fr.imageDataUrl,
+                guestImageDataUrl: synced.guestDataUrl ?? fr.guestImageDataUrl,
+              };
+            })
+          );
+        }
+
+        if (next.snapshot.editorState) {
+          setStripTint(next.snapshot.editorState.stripTint);
+          setCaption(next.snapshot.editorState.caption);
+          setStickers(next.snapshot.editorState.stickers);
+        }
+      }
+    });
+  }, []);
 
   const handleStartMode = (nextMode: BoothMode, targetScreen: ScreenId) => {
     setMode(nextMode);
@@ -100,17 +143,48 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCaptureFrame = (frameIndex: number, dataUrl: string) => {
+  const handleChangeTakeCount = (count: 3 | 4) => {
+    setTakeCount(count);
+    realtimeClient.syncConfig({ takeCount: count });
+  };
+
+  const handleChangeFilter = (filter: PhotoFilterId) => {
+    setSelectedFilter(filter);
+    realtimeClient.syncConfig({ selectedFilter: filter });
+  };
+
+  const handleChangeLayout = (nextLayout: TemplateLayoutId) => {
+    setLayout(nextLayout);
+    realtimeClient.syncConfig({ layout: nextLayout });
+  };
+
+  const handleChangeStripTint = (color: string) => {
+    setStripTint(color);
+    realtimeClient.sendEditorOperation('set-tint', { value: color });
+  };
+
+  const handleChangeCaption = (text: string) => {
+    setCaption(text);
+    realtimeClient.sendEditorOperation('set-caption', { value: text });
+  };
+
+  const handleCaptureFrame = (
+    frameIndex: number,
+    dataUrl: string,
+    targetRole: 'host' | 'guest' = 'host'
+  ) => {
     setFrames((prev) =>
       prev.map((f, idx) =>
         idx === frameIndex
-          ? {
-              ...f,
-              imageDataUrl: dataUrl,
-            }
+          ? targetRole === 'guest'
+            ? { ...f, guestImageDataUrl: dataUrl }
+            : { ...f, imageDataUrl: dataUrl }
           : f
       )
     );
+    if (mode === 'duo' && targetRole === (realtimeState.role ?? 'host')) {
+      realtimeClient.syncCapturedFrame(frameIndex, dataUrl);
+    }
   };
 
   const handleRetakeFrame = (frameId: number) => {
@@ -131,12 +205,20 @@ export const App: React.FC = () => {
   };
 
   const handleToggleSticker = (id: string) => {
+    const actor = realtimeState.role ?? 'host';
     setStickers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, active: !s.active } : s))
+      prev.map((s) =>
+        s.id === id ? { ...s, active: !s.active, owner: actor } : s
+      )
     );
+    realtimeClient.sendEditorOperation('toggle-sticker', { stickerId: id });
   };
 
   const handleUndoByOwner = (owner: 'host' | 'guest') => {
+    if (realtimeState.snapshot) {
+      realtimeClient.sendPersonalUndo(owner);
+      return;
+    }
     setStickers((prev) =>
       prev.map((s) => (s.owner === owner ? { ...s, active: false } : s))
     );
@@ -144,14 +226,12 @@ export const App: React.FC = () => {
 
   return (
     <>
-      {/* Siang: Daun gugur musiman | Malam: Efek bintang-bintang berkelap-kelip (mati saat di Kamera & Editor) */}
       <SeasonalAmbient
         season={season}
         isNight={isNight}
         enabled={AMBIENT_SCREENS.includes(activeScreen)}
       />
 
-      {/* Header Edge-to-Edge Translucent Glass + Switch Night Mode */}
       <GlassHeader
         activeScreen={activeScreen}
         onSelectScreen={setActiveScreen}
@@ -213,6 +293,19 @@ export const App: React.FC = () => {
               onChangeMode={setMode}
               roomState={roomState}
               onChangeRoomState={setRoomState}
+              realtimeState={realtimeState}
+              onNavigate={setActiveScreen}
+            />
+          )}
+
+          {activeScreen === 'frame-select' && (
+            <FrameSelectScreen
+              mode={mode}
+              layout={layout}
+              onChangeLayout={handleChangeLayout}
+              takeCount={takeCount}
+              onChangeTakeCount={handleChangeTakeCount}
+              roomCode={realtimeState.snapshot?.code ?? null}
               onNavigate={setActiveScreen}
             />
           )}
@@ -222,11 +315,14 @@ export const App: React.FC = () => {
               mode={mode}
               isNight={isNight}
               takeCount={takeCount}
-              onChangeTakeCount={setTakeCount}
+              onChangeTakeCount={handleChangeTakeCount}
               selectedFilter={selectedFilter}
-              onChangeFilter={setSelectedFilter}
+              onChangeFilter={handleChangeFilter}
+              layout={layout}
+              onChangeLayout={handleChangeLayout}
               frames={frames}
               onCaptureFrame={handleCaptureFrame}
+              realtimeState={realtimeState}
               onNavigate={setActiveScreen}
             />
           )}
@@ -239,6 +335,7 @@ export const App: React.FC = () => {
               frames={frames}
               retakesRemaining={retakesRemaining}
               onRetakeFrame={handleRetakeFrame}
+              realtimeState={realtimeState}
               onNavigate={setActiveScreen}
             />
           )}
@@ -248,17 +345,20 @@ export const App: React.FC = () => {
               mode={mode}
               takeCount={takeCount}
               frames={frames}
+              retakesRemaining={retakesRemaining}
+              onRetakeFrame={handleRetakeFrame}
               layout={layout}
-              onChangeLayout={setLayout}
+              onChangeLayout={handleChangeLayout}
               selectedFilter={selectedFilter}
-              onChangeFilter={setSelectedFilter}
+              onChangeFilter={handleChangeFilter}
               stripTint={stripTint}
-              onChangeStripTint={setStripTint}
+              onChangeStripTint={handleChangeStripTint}
               caption={caption}
-              onChangeCaption={setCaption}
+              onChangeCaption={handleChangeCaption}
               stickers={stickers}
               onToggleSticker={handleToggleSticker}
               onUndoByOwner={handleUndoByOwner}
+              realtimeState={realtimeState}
               onNavigate={setActiveScreen}
             />
           )}
@@ -267,7 +367,7 @@ export const App: React.FC = () => {
             <FlipbookScreen
               mode={mode}
               selectedFilter={selectedFilter}
-              onChangeFilter={setSelectedFilter}
+              onChangeFilter={handleChangeFilter}
               onNavigate={setActiveScreen}
             />
           )}

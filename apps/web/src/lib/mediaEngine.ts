@@ -309,27 +309,88 @@ export async function renderClassicCompositeDataUrl(params: {
       );
 
     try {
-      const img = await loadImage(sourceUrl);
-      ctx.save();
-      if (fr.imageDataUrl) {
+      if (mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl) {
+        const [hostImg, guestImg] = await Promise.all([
+          loadImage(fr.imageDataUrl),
+          loadImage(fr.guestImageDataUrl)
+        ]);
+        const halfW = slotW / 2;
+
+        // Draw Host on Left Half
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, halfW, slotH);
+        ctx.clip();
         ctx.filter = cssFilter;
-      }
-      // Cover-fit image into slot
-      const imgRatio = img.width / img.height;
-      const boxRatio = slotW / slotH;
-      let dw = slotW;
-      let dh = slotH;
-      let dx = x;
-      let dy = y;
-      if (imgRatio > boxRatio) {
-        dw = slotH * imgRatio;
-        dx = x - (dw - slotW) / 2;
+        const hRatio = hostImg.width / hostImg.height;
+        const halfBoxRatio = halfW / slotH;
+        let hdw = halfW;
+        let hdh = slotH;
+        let hdx = x;
+        let hdy = y;
+        if (hRatio > halfBoxRatio) {
+          hdw = slotH * hRatio;
+          hdx = x - (hdw - halfW) / 2;
+        } else {
+          hdh = halfW / hRatio;
+          hdy = y - (hdh - slotH) / 2;
+        }
+        ctx.drawImage(hostImg, hdx, hdy, hdw, hdh);
+        ctx.restore();
+
+        // Draw Guest on Right Half
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x + halfW, y, halfW, slotH);
+        ctx.clip();
+        ctx.filter = cssFilter;
+        const gRatio = guestImg.width / guestImg.height;
+        let gdw = halfW;
+        let gdh = slotH;
+        let gdx = x + halfW;
+        let gdy = y;
+        if (gRatio > halfBoxRatio) {
+          gdw = slotH * gRatio;
+          gdx = x + halfW - (gdw - halfW) / 2;
+        } else {
+          gdh = halfW / gRatio;
+          gdy = y - (gdh - slotH) / 2;
+        }
+        ctx.drawImage(guestImg, gdx, gdy, gdw, gdh);
+        ctx.restore();
+
+        // Subtle center split divider
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + halfW, y);
+        ctx.lineTo(x + halfW, y + slotH);
+        ctx.stroke();
+        ctx.restore();
       } else {
-        dh = slotW / imgRatio;
-        dy = y - (dh - slotH) / 2;
+        const img = await loadImage(sourceUrl);
+        ctx.save();
+        if (fr.imageDataUrl) {
+          ctx.filter = cssFilter;
+        }
+        // Cover-fit image into slot
+        const imgRatio = img.width / img.height;
+        const boxRatio = slotW / slotH;
+        let dw = slotW;
+        let dh = slotH;
+        let dx = x;
+        let dy = y;
+        if (imgRatio > boxRatio) {
+          dw = slotH * imgRatio;
+          dx = x - (dw - slotW) / 2;
+        } else {
+          dh = slotW / imgRatio;
+          dy = y - (dh - slotH) / 2;
+        }
+        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.restore();
       }
-      ctx.drawImage(img, dx, dy, dw, dh);
-      ctx.restore();
     } catch {
       ctx.fillStyle = fr.accentBg;
       ctx.fillRect(x, y, slotW, slotH);

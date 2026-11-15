@@ -967,6 +967,139 @@ html[data-theme="night"] .solid-footer {
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
+/* Keep 6 Studio Tabs Compact on Single Line on Desktop */
+.screen-nav {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.nav-link-clean {
+  white-space: nowrap;
+  padding: 7px 12px;
+  font-size: 0.85rem;
+}
+
+html[data-theme="night"] .btn-lift.active-pill,
+html[data-theme="night"] .btn.active-pill {
+  background: #7AB3EF;
+  color: #18181B;
+  border-color: #7AB3EF;
+}
+
+/* Contrast Guard: Ensure Any Light Card / White Box Keeps Dark Ink Text in Night Mode */
+html[data-theme="night"] .surface-light,
+html[data-theme="night"] .clean-card.surface-light,
+html[data-theme="night"] [style*="#FFFFFF"],
+html[data-theme="night"] [style*="#ffffff"],
+html[data-theme="night"] [style*="rgb(255, 255, 255)"],
+html[data-theme="night"] [style*="rgba(255,255,255"],
+html[data-theme="night"] [style*="rgba(255, 255, 255"],
+html[data-theme="night"] [style*="#FCEEF3"],
+html[data-theme="night"] [style*="rgb(252, 238, 243)"],
+html[data-theme="night"] [style*="#EBF4FD"],
+html[data-theme="night"] [style*="rgb(235, 244, 253)"],
+html[data-theme="night"] [style*="#ECF3ED"],
+html[data-theme="night"] [style*="rgb(236, 243, 237)"],
+html[data-theme="night"] [style*="#FAF7F2"],
+html[data-theme="night"] [style*="rgb(250, 247, 242)"],
+html[data-theme="night"] [style*="#FAF9F6"],
+html[data-theme="night"] [style*="rgb(250, 249, 246)"],
+html[data-theme="night"] [style*="#FAF3EA"],
+html[data-theme="night"] [style*="rgb(250, 243, 234)"],
+html[data-theme="night"] [style*="#FEF3C7"],
+html[data-theme="night"] [style*="rgb(254, 243, 199)"] {
+  color: #18181B;
+}
+
+html[data-theme="night"] :is(
+  .surface-light,
+  [style*="#FFFFFF"],
+  [style*="#ffffff"],
+  [style*="rgb(255, 255, 255)"],
+  [style*="rgba(255,255,255"],
+  [style*="rgba(255, 255, 255"],
+  [style*="#FCEEF3"],
+  [style*="rgb(252, 238, 243)"],
+  [style*="#EBF4FD"],
+  [style*="rgb(235, 244, 253)"],
+  [style*="#ECF3ED"],
+  [style*="rgb(236, 243, 237)"],
+  [style*="#FAF7F2"],
+  [style*="rgb(250, 247, 242)"],
+  [style*="#FAF9F6"],
+  [style*="rgb(250, 249, 246)"],
+  [style*="#FAF3EA"],
+  [style*="rgb(250, 243, 234)"],
+  [style*="#FEF3C7"],
+  [style*="rgb(254, 243, 199)"]
+) :is(h1, h2, h3, h4, p, strong, label, .heading-h1, .heading-h2):not(.btn):not(.btn *):not([style*="#181619"] *) {
+  color: #18181B;
+}
+
+html[data-theme="night"] :is(
+  .surface-light,
+  [style*="#FFFFFF"],
+  [style*="rgb(255, 255, 255)"],
+  [style*="rgba(255,255,255"],
+  [style*="rgba(255, 255, 255"],
+  [style*="#FCEEF3"],
+  [style*="rgb(252, 238, 243)"],
+  [style*="#EBF4FD"],
+  [style*="rgb(235, 244, 253)"],
+  [style*="#ECF3ED"],
+  [style*="rgb(236, 243, 237)"],
+  [style*="#FAF7F2"],
+  [style*="rgb(250, 247, 242)"],
+  [style*="#FAF9F6"],
+  [style*="rgb(250, 249, 246)"],
+  [style*="#FEF3C7"],
+  [style*="rgb(254, 243, 199)"]
+) .text-muted {
+  color: #4A4A52;
+}
+
+/* Night-Mode Adaptive Card Tones for Unselected / Selected Option Cards */
+.card-tone-neutral {
+  background: rgba(255, 255, 255, 0.94);
+}
+.card-tone-rose {
+  background: #FCEEF3;
+  color: #18181B;
+}
+.card-tone-sky {
+  background: #EBF4FD;
+  color: #18181B;
+}
+.card-tone-cream {
+  background: #FAF7F2;
+  color: #18181B;
+}
+.card-tone-sage {
+  background: #ECF3ED;
+  color: #18181B;
+}
+
+html[data-theme="night"] .card-tone-neutral {
+  background: rgba(26, 31, 44, 0.92);
+  color: #F4F2ED;
+}
+html[data-theme="night"] .card-tone-rose {
+  background: #FCEEF3;
+  color: #18181B;
+}
+html[data-theme="night"] .card-tone-sky {
+  background: #EBF4FD;
+  color: #18181B;
+}
+html[data-theme="night"] .card-tone-cream {
+  background: #FAF7F2;
+  color: #18181B;
+}
+html[data-theme="night"] .card-tone-sage {
+  background: #ECF3ED;
+  color: #18181B;
+}
+
 html[data-theme="night"] .camera-asset-img {
   filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55));
 }
