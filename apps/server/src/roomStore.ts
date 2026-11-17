@@ -7,6 +7,7 @@ import {
   type EditorOperation,
   type ParticipantRole,
   type PhotoFilterId,
+  type PlacedSticker,
   type RetakePromptState,
   type RoomConnectionState,
   type RoomParticipant,
@@ -51,7 +52,8 @@ export function createInitialEditorState(): CollaborativeEditorState {
     editorVersion: 1,
     stripTint: '#FFFFFF',
     caption: 'Nov 14, 2026 12:02pm',
-    stickers: DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s })),
+    stickers: DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s, active: false })),
+    placedStickers: [],
     history: [],
     pausedByDisconnect: false,
     lastActor: null,
@@ -87,11 +89,16 @@ export class RoomStore {
       selectedFilter: room.selectedFilter,
       layout: room.layout,
       retakesRemaining: room.retakesRemaining,
-      participants: room.participants.map(({ rejoinToken: _token, ...pub }) => pub),
-      countdown: room.countdown,
-      retakePrompt: room.retakePrompt,
-      syncedFrames: room.syncedFrames,
-      editorState: room.editorState,
+      participants: room.participants.map(({ rejoinToken: _token, ...pub }) => ({ ...pub })),
+      countdown: room.countdown ? { ...room.countdown } : null,
+      retakePrompt: room.retakePrompt ? { ...room.retakePrompt } : null,
+      syncedFrames: room.syncedFrames.map((sf) => ({ ...sf })),
+      editorState: {
+        ...room.editorState,
+        stickers: room.editorState.stickers.map((s) => ({ ...s })),
+        placedStickers: room.editorState.placedStickers.map((ps) => ({ ...ps })),
+        history: room.editorState.history.map((h) => ({ ...h })),
+      },
     };
   }
 
@@ -546,9 +553,18 @@ export class RoomStore {
     actor: ParticipantRole,
     params: {
       opId: string;
-      kind: 'toggle-sticker' | 'set-tint' | 'set-caption';
+      kind:
+        | 'toggle-sticker'
+        | 'set-tint'
+        | 'set-caption'
+        | 'add-sticker'
+        | 'update-sticker'
+        | 'remove-sticker';
       stickerId?: string;
       value?: string;
+      placedSticker?: PlacedSticker;
+      instanceId?: string;
+      patch?: Partial<Pick<PlacedSticker, 'xPct' | 'yPct' | 'scale' | 'rotation'>>;
     }
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
@@ -579,6 +595,46 @@ export class RoomStore {
         nextActive,
       };
       editor.history.push(op);
+    } else if (params.kind === 'add-sticker' && params.placedSticker) {
+      const item: PlacedSticker = { ...params.placedSticker, owner: actor };
+      editor.placedStickers.push(item);
+      editor.history.push({
+        opId: params.opId,
+        actor,
+        timestamp: now,
+        kind: 'add-sticker',
+        instanceId: item.instanceId,
+        placedSticker: { ...item },
+      });
+    } else if (params.kind === 'update-sticker' && params.instanceId && params.patch) {
+      const target = editor.placedStickers.find((ps) => ps.instanceId === params.instanceId);
+      if (!target) return null;
+      const prevStickerState: PlacedSticker = { ...target };
+      if (typeof params.patch.xPct === 'number') target.xPct = params.patch.xPct;
+      if (typeof params.patch.yPct === 'number') target.yPct = params.patch.yPct;
+      if (typeof params.patch.scale === 'number') target.scale = params.patch.scale;
+      if (typeof params.patch.rotation === 'number') target.rotation = params.patch.rotation;
+      editor.history.push({
+        opId: params.opId,
+        actor,
+        timestamp: now,
+        kind: 'update-sticker',
+        instanceId: target.instanceId,
+        prevStickerState,
+        placedSticker: { ...target },
+      });
+    } else if (params.kind === 'remove-sticker' && params.instanceId) {
+      const idx = editor.placedStickers.findIndex((ps) => ps.instanceId === params.instanceId);
+      if (idx === -1) return null;
+      const [removed] = editor.placedStickers.splice(idx, 1);
+      editor.history.push({
+        opId: params.opId,
+        actor,
+        timestamp: now,
+        kind: 'remove-sticker',
+        instanceId: removed.instanceId,
+        prevStickerState: { ...removed },
+      });
     } else if (params.kind === 'set-tint' && typeof params.value === 'string') {
       const prevValue = editor.stripTint;
       editor.stripTint = params.value;
@@ -628,6 +684,16 @@ export class RoomStore {
         if (stk && typeof op.prevActive === 'boolean') {
           stk.active = op.prevActive;
         }
+      } else if (op.kind === 'add-sticker' && op.instanceId) {
+        const idx = editor.placedStickers.findIndex((ps) => ps.instanceId === op.instanceId);
+        if (idx >= 0) editor.placedStickers.splice(idx, 1);
+      } else if (op.kind === 'update-sticker' && op.prevStickerState) {
+        const target = editor.placedStickers.find(
+          (ps) => ps.instanceId === op.prevStickerState?.instanceId
+        );
+        if (target) Object.assign(target, op.prevStickerState);
+      } else if (op.kind === 'remove-sticker' && op.prevStickerState) {
+        editor.placedStickers.push({ ...op.prevStickerState });
       } else if (op.kind === 'set-tint' && typeof op.prevValue === 'string') {
         editor.stripTint = op.prevValue;
       } else if (op.kind === 'set-caption' && typeof op.prevValue === 'string') {
@@ -642,14 +708,23 @@ export class RoomStore {
       return this.toPublicSnapshot(room);
     }
 
-    // Fallback: deactivate any active stickers owned by targetActor
+    // Fallback: remove last placed sticker or deactivate legacy sticker owned by targetActor
     let changed = false;
-    editor.stickers.forEach((s) => {
-      if (s.owner === targetActor && s.active) {
-        s.active = false;
+    for (let j = editor.placedStickers.length - 1; j >= 0; j--) {
+      if (editor.placedStickers[j].owner === targetActor) {
+        editor.placedStickers.splice(j, 1);
         changed = true;
+        break;
       }
-    });
+    }
+    if (!changed) {
+      editor.stickers.forEach((s) => {
+        if (s.owner === targetActor && s.active) {
+          s.active = false;
+          changed = true;
+        }
+      });
+    }
     if (changed) {
       editor.editorVersion += 1;
       editor.lastActor = targetActor;

@@ -305,28 +305,12 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
           </p>
         </div>
 
-        {/* Camera Source Controls */}
+        {/* Camera Mirror Control */}
         <div className="demo-state-strip" style={{ gap: 8 }}>
           <button
             type="button"
-            className={`btn btn-lift ${!useSimulation ? 'active-pill' : ''}`}
-            style={{ minHeight: 32, padding: '4px 12px', fontSize: '0.76rem' }}
-            onClick={() => setUseSimulation(false)}
-          >
-            📷 Webcam Asli
-          </button>
-          <button
-            type="button"
-            className={`btn btn-lift ${useSimulation ? 'active-pill' : ''}`}
-            style={{ minHeight: 32, padding: '4px 12px', fontSize: '0.76rem' }}
-            onClick={() => setUseSimulation(true)}
-          >
-            🎭 Mode Simulasi
-          </button>
-          <button
-            type="button"
             className={`btn btn-lift ${mirror ? 'active-pill' : ''}`}
-            style={{ minHeight: 32, padding: '4px 12px', fontSize: '0.76rem' }}
+            style={{ minHeight: 32, padding: '4px 14px', fontSize: '0.76rem' }}
             onClick={() => setMirror((m) => !m)}
           >
             🪞 Mirror: {mirror ? 'ON' : 'OFF'}
@@ -386,14 +370,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
         )}
 
         {/* Main Studio Grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(300px, 0.92fr) minmax(0, 1.38fr)',
-            gap: 28,
-            alignItems: 'start',
-          }}
-        >
+        <div className="flipbook-workspace-grid">
           {/* LEFT PANEL: Preset Explorer, Pose Mode, Interactive Overlay & Filters */}
           <div className="clean-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>

@@ -5,6 +5,7 @@ import {
   type ExportFormat,
   type FlipbookEffectOverlayId,
   type PhotoFilterId,
+  type PlacedSticker,
   type StickerItem,
   type TemplateLayoutId,
 } from '@momentos/shared';
@@ -175,9 +176,20 @@ export async function renderClassicCompositeDataUrl(params: {
   selectedFilter: PhotoFilterId;
   caption: string;
   stickers: StickerItem[];
+  placedStickers?: PlacedSticker[];
   format: ExportFormat;
 }): Promise<string> {
-  const { mode, frames, layout, stripTint, selectedFilter, caption, stickers, format } = params;
+  const {
+    mode,
+    frames,
+    layout,
+    stripTint,
+    selectedFilter,
+    caption,
+    stickers,
+    placedStickers = [],
+    format,
+  } = params;
   const cssFilter = getCssFilterById(selectedFilter);
   const activeStickers = stickers.filter((s) => s.active);
 
@@ -185,10 +197,28 @@ export async function renderClassicCompositeDataUrl(params: {
   const isTicket = layout === 'vintage-ticket';
   const isFilm = layout === 'film-35mm';
   const isScrapbook = layout === 'editorial-scrapbook';
+  const isPolaroid = layout === 'polaroid-duo';
+
+  const canvasWidth = isGridOrScrapbook ? 1080 : 640;
+  const cols = isGridOrScrapbook ? 2 : 1;
+  const rows = Math.ceil(frames.length / cols);
+  const sidePad = isFilm ? 74 : isGridOrScrapbook ? 56 : isPolaroid ? 48 : 38;
+  const gap = isGridOrScrapbook ? 30 : isPolaroid ? 28 : 20;
+  const slotW = (canvasWidth - sidePad * 2 - gap * (cols - 1)) / cols;
+  const slotH = isGridOrScrapbook
+    ? Math.round(slotW * 0.78)
+    : isPolaroid
+    ? Math.round(slotW * 0.76)
+    : Math.round(slotW * 0.66);
+
+  const startY = isScrapbook ? 148 : 96;
+  const footerSpace = isTicket ? 150 : isPolaroid ? 160 : 124;
+  const rowExtra = isScrapbook ? 44 : isPolaroid ? 22 : 0;
+  const canvasHeight = startY + rows * (slotH + rowExtra) + Math.max(0, rows - 1) * gap + footerSpace;
 
   const canvas = document.createElement('canvas');
-  canvas.width = isGridOrScrapbook ? 1080 : 640;
-  canvas.height = isGridOrScrapbook ? 1280 : Math.max(1180, 320 + frames.length * 360);
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
@@ -199,6 +229,7 @@ export async function renderClassicCompositeDataUrl(params: {
     : isScrapbook && stripTint === '#FFFFFF'
     ? '#FAF3EA'
     : stripTint;
+  const isDarkPaper = paperBg === '#18181B' || isFilm;
 
   // Base background
   ctx.fillStyle = paperBg;
@@ -224,10 +255,10 @@ export async function renderClassicCompositeDataUrl(params: {
   // Sprocket holes for 35mm film
   if (isFilm) {
     ctx.fillStyle = '#FFFFFF';
-    for (let y = 44; y < canvas.height - 80; y += 64) {
-      drawRoundedRectPath(ctx, 26, y, 24, 34, 4);
+    for (let y = 44; y < canvas.height - 60; y += 64) {
+      drawRoundedRectPath(ctx, 24, y, 22, 32, 4);
       ctx.fill();
-      drawRoundedRectPath(ctx, canvas.width - 50, y, 24, 34, 4);
+      drawRoundedRectPath(ctx, canvas.width - 46, y, 22, 32, 4);
       ctx.fill();
     }
   }
@@ -236,49 +267,42 @@ export async function renderClassicCompositeDataUrl(params: {
   if (isTicket) {
     ctx.fillStyle = '#9E325F';
     ctx.font = '700 22px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText('ADMIT ONE • CLASSIC STUDIO', 46, 68);
+    ctx.fillText('ADMIT ONE • STUDIO', 42, 62);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#7A6554';
     ctx.font = '700 20px monospace';
-    ctx.fillText('NO. 2026-0411', canvas.width - 46, 68);
+    ctx.fillText('NO. 2026-0411', canvas.width - 42, 62);
     ctx.textAlign = 'left';
   } else if (isFilm) {
     ctx.fillStyle = '#E09F5A';
     ctx.font = '700 22px monospace';
-    ctx.fillText('MOMENTOS GC 400', 76, 68);
+    ctx.fillText('MOMENTOS GC 400', 74, 62);
     ctx.textAlign = 'right';
-    ctx.fillText('SAFETY FILM', canvas.width - 76, 68);
+    ctx.fillText('SAFETY FILM', canvas.width - 74, 62);
     ctx.textAlign = 'left';
   } else if (isScrapbook) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#2A1F1D';
     ctx.font = 'italic 44px Georgia, serif';
-    ctx.fillText('Little Moments Journal', canvas.width / 2, 76);
+    ctx.fillText('Little Moments Journal', canvas.width / 2, 74);
     ctx.fillStyle = '#BC4374';
     ctx.font = '700 18px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText('SCRAPBOOK EDITION • VOL. 03', canvas.width / 2, 110);
+    ctx.fillText('SCRAPBOOK EDITION', canvas.width / 2, 108);
     ctx.textAlign = 'left';
   } else {
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#18181B';
-    ctx.font = '700 26px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText('MOMENTOS PHOTOBOOTH', canvas.width / 2, 68);
+    ctx.fillStyle = isDarkPaper ? '#FAF3EA' : '#18181B';
+    ctx.font = '700 22px "Plus Jakarta Sans", sans-serif';
+    ctx.fillText('MOMENTOS', canvas.width / 2, 60);
     ctx.textAlign = 'left';
   }
-
-  const startY = isScrapbook ? 148 : 104;
-  const cols = isGridOrScrapbook ? 2 : 1;
-  const sidePad = isFilm ? 78 : isGridOrScrapbook ? 56 : 46;
-  const gap = isGridOrScrapbook ? 32 : 24;
-  const slotW = (canvas.width - sidePad * 2 - gap * (cols - 1)) / cols;
-  const slotH = isGridOrScrapbook ? 410 : layout === 'polaroid-duo' ? 330 : 310;
 
   for (let i = 0; i < frames.length; i++) {
     const fr = frames[i];
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = sidePad + col * (slotW + gap);
-    const y = startY + row * (slotH + gap + (isScrapbook ? 40 : 0));
+    const y = startY + row * (slotH + gap + rowExtra);
 
     ctx.save();
     if (isScrapbook) {
@@ -288,15 +312,21 @@ export async function renderClassicCompositeDataUrl(params: {
       ctx.rotate(((i % 2 === 0 ? -2.2 : 2.2) * Math.PI) / 180);
       ctx.translate(-cx, -cy);
 
-      // Polaroid white card around photo
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(x - 12, y - 12, slotW + 24, slotH + 62);
+      ctx.fillRect(x - 12, y - 12, slotW + 24, slotH + 54);
       ctx.strokeStyle = '#DFD3C3';
       ctx.lineWidth = 2;
-      ctx.strokeRect(x - 12, y - 12, slotW + 24, slotH + 62);
+      ctx.strokeRect(x - 12, y - 12, slotW + 24, slotH + 54);
+    } else if (isPolaroid) {
+      ctx.fillStyle = '#FFFFFF';
+      drawRoundedRectPath(ctx, x - 10, y - 10, slotW + 20, slotH + 34, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#18181B';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
 
-    drawRoundedRectPath(ctx, x, y, slotW, slotH, isScrapbook ? 6 : 16);
+    drawRoundedRectPath(ctx, x, y, slotW, slotH, isScrapbook || isPolaroid ? 4 : 6);
     ctx.clip();
 
     const sourceUrl =
@@ -312,7 +342,7 @@ export async function renderClassicCompositeDataUrl(params: {
       if (mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl) {
         const [hostImg, guestImg] = await Promise.all([
           loadImage(fr.imageDataUrl),
-          loadImage(fr.guestImageDataUrl)
+          loadImage(fr.guestImageDataUrl),
         ]);
         const halfW = slotW / 2;
 
@@ -359,9 +389,9 @@ export async function renderClassicCompositeDataUrl(params: {
         ctx.drawImage(guestImg, gdx, gdy, gdw, gdh);
         ctx.restore();
 
-        // Subtle center split divider
+        // Clean thin divider like Gambar 5
         ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(x + halfW, y);
@@ -374,7 +404,6 @@ export async function renderClassicCompositeDataUrl(params: {
         if (fr.imageDataUrl) {
           ctx.filter = cssFilter;
         }
-        // Cover-fit image into slot
         const imgRatio = img.width / img.height;
         const boxRatio = slotW / slotH;
         let dw = slotW;
@@ -397,34 +426,86 @@ export async function renderClassicCompositeDataUrl(params: {
     }
     ctx.restore();
 
-    // Film frame border & amber marker
     if (isFilm) {
       ctx.strokeStyle = 'rgba(224, 159, 90, 0.7)';
       ctx.lineWidth = 2;
-      drawRoundedRectPath(ctx, x, y, slotW, slotH, 10);
+      drawRoundedRectPath(ctx, x, y, slotW, slotH, 6);
       ctx.stroke();
-      ctx.fillStyle = '#E09F5A';
-      ctx.font = '700 18px monospace';
-      ctx.fillText(`▶ 0${i + 1}A`, x + 10, y - 6);
-    } else if (!isScrapbook) {
+    } else if (!isScrapbook && !isPolaroid) {
       ctx.strokeStyle = '#18181B';
-      ctx.lineWidth = 3;
-      drawRoundedRectPath(ctx, x, y, slotW, slotH, 16);
+      ctx.lineWidth = 2.5;
+      drawRoundedRectPath(ctx, x, y, slotW, slotH, 6);
       ctx.stroke();
-    } else {
-      // Washi tape strip on top of polaroid
+    } else if (isScrapbook) {
       ctx.save();
       const tapeX = x + slotW / 2 - 48;
       ctx.fillStyle = i % 2 === 0 ? 'rgba(232,156,182,0.86)' : 'rgba(169,192,150,0.86)';
-      ctx.fillRect(tapeX, y - 24, 96, 22);
+      ctx.fillRect(tapeX, y - 22, 96, 20);
       ctx.restore();
     }
   }
 
-  // Render active stickers across top strip bar
-  if (activeStickers.length > 0) {
+  // Footer caption & ticket barcode
+  const footerY = canvas.height - 54;
+  ctx.textAlign = 'center';
+  if (isTicket) {
+    ctx.strokeStyle = '#7A6554';
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.moveTo(42, canvas.height - 96);
+    ctx.lineTo(canvas.width - 42, canvas.height - 96);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#2A1F1D';
+    ctx.font = '700 26px Georgia, serif';
+    ctx.fillText(caption || 'MOMENTOS ADMIT ONE', canvas.width / 2, canvas.height - 60);
+
+    ctx.fillStyle = '#18181B';
+    for (let bx = 140; bx < canvas.width - 140; bx += 11) {
+      const barW = (bx % 3) + 2;
+      ctx.fillRect(bx, canvas.height - 42, barW, 18);
+    }
+  } else {
+    ctx.fillStyle = isFilm ? '#E09F5A' : isDarkPaper ? '#FAF3EA' : '#18181B';
+    ctx.font = isFilm ? '700 22px monospace' : '700 24px "Plus Jakarta Sans", sans-serif';
+    ctx.fillText(caption || 'MOMENTOS • 2026', canvas.width / 2, footerY);
+  }
+
+  // Render freeform Canva-style placed stickers
+  if (placedStickers.length > 0) {
+    for (const ps of placedStickers) {
+      const px = (ps.xPct / 100) * canvas.width;
+      const py = (ps.yPct / 100) * canvas.height;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate((ps.rotation * Math.PI) / 180);
+      ctx.scale(ps.scale, ps.scale);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      if (ps.category === 'stamp' || ps.category === 'tape') {
+        const text = `${ps.emoji} ${ps.badgeText ?? ps.label}`;
+        ctx.font = '700 20px "Plus Jakarta Sans", sans-serif';
+        const tw = ctx.measureText(text).width + 26;
+        const th = 38;
+        ctx.fillStyle = ps.category === 'tape' ? 'rgba(232,156,182,0.92)' : '#FFFDF9';
+        drawRoundedRectPath(ctx, -tw / 2, -th / 2, tw, th, ps.category === 'tape' ? 4 : 8);
+        ctx.fill();
+        ctx.strokeStyle = ps.category === 'stamp' ? '#BC4374' : '#18181B';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = ps.category === 'stamp' ? '#BC4374' : '#18181B';
+        ctx.fillText(text, 0, 1);
+      } else {
+        ctx.font = '56px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+        ctx.fillText(ps.emoji, 0, 0);
+      }
+      ctx.restore();
+    }
+  } else if (activeStickers.length > 0) {
     let sx = sidePad;
-    const sy = canvas.height - 150;
+    const sy = canvas.height - 130;
     activeStickers.slice(0, 6).forEach((stk) => {
       const text = `${stk.emoji} ${stk.badgeText ?? stk.label}`;
       ctx.font = '700 18px "Plus Jakarta Sans", sans-serif';
@@ -442,34 +523,6 @@ export async function renderClassicCompositeDataUrl(params: {
       ctx.fillText(text, sx + 12, sy + 23);
       sx += tw + 10;
     });
-  }
-
-  // Footer caption & ticket barcode
-  const footerY = canvas.height - 62;
-  ctx.textAlign = 'center';
-  if (isTicket) {
-    ctx.strokeStyle = '#7A6554';
-    ctx.setLineDash([8, 8]);
-    ctx.beginPath();
-    ctx.moveTo(42, canvas.height - 102);
-    ctx.lineTo(canvas.width - 42, canvas.height - 102);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = '#2A1F1D';
-    ctx.font = '700 28px Georgia, serif';
-    ctx.fillText(caption || 'MOMENTOS ADMIT ONE', canvas.width / 2, canvas.height - 64);
-
-    // Barcode stripes
-    ctx.fillStyle = '#18181B';
-    for (let bx = 140; bx < canvas.width - 140; bx += 11) {
-      const barW = (bx % 3) + 2;
-      ctx.fillRect(bx, canvas.height - 46, barW, 20);
-    }
-  } else {
-    ctx.fillStyle = isFilm ? '#E09F5A' : '#18181B';
-    ctx.font = isFilm ? '700 24px monospace' : '700 26px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(caption || 'MOMENTOS • 2026', canvas.width / 2, footerY);
   }
 
   const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';

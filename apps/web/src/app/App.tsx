@@ -4,6 +4,7 @@ import {
   type BoothMode,
   type CapturedFrame,
   type PhotoFilterId,
+  type PlacedSticker,
   type RoomConnectionState,
   type ScreenId,
   type StickerItem,
@@ -93,7 +94,10 @@ export const App: React.FC = () => {
   const [layout, setLayout] = useState<TemplateLayoutId>('strip-1x4');
   const [stripTint, setStripTint] = useState<string>('#FFFFFF');
   const [caption, setCaption] = useState<string>('Nov 14, 2026 12:02pm');
-  const [stickers, setStickers] = useState<StickerItem[]>(DEFAULT_STICKER_LIBRARY);
+  const [stickers, setStickers] = useState<StickerItem[]>(
+    DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s, active: false }))
+  );
+  const [placedStickers, setPlacedStickers] = useState<PlacedSticker[]>([]);
   const [realtimeState, setRealtimeState] = useState<RealtimeClientState>(() =>
     realtimeClient.getState()
   );
@@ -101,6 +105,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isNight ? 'night' : 'day');
   }, [isNight]);
+
+  // Auto-join Duo room via ?room=MMT-XXXX invite link
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const inviteCode = params.get('room');
+    if (inviteCode && inviteCode.trim()) {
+      setMode('duo');
+      realtimeClient.joinRoom(inviteCode.trim().toUpperCase(), 'Guest');
+      setActiveScreen('camera');
+    }
+  }, []);
 
   useEffect(() => {
     return realtimeClient.subscribe((next) => {
@@ -132,6 +148,9 @@ export const App: React.FC = () => {
           setStripTint(next.snapshot.editorState.stripTint);
           setCaption(next.snapshot.editorState.caption);
           setStickers(next.snapshot.editorState.stickers);
+          if (Array.isArray(next.snapshot.editorState.placedStickers)) {
+            setPlacedStickers(next.snapshot.editorState.placedStickers);
+          }
         }
       }
     });
@@ -204,14 +223,40 @@ export const App: React.FC = () => {
     setRetakesRemaining((prev) => Math.max(0, prev - 1));
   };
 
-  const handleToggleSticker = (id: string) => {
+  const handleAddPlacedSticker = (stk: StickerItem): string => {
     const actor = realtimeState.role ?? 'host';
-    setStickers((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, active: !s.active, owner: actor } : s
-      )
+    const instanceId = `ps-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newItem: PlacedSticker = {
+      instanceId,
+      stickerId: stk.id,
+      emoji: stk.emoji,
+      label: stk.label,
+      category: stk.category,
+      badgeText: stk.badgeText,
+      owner: actor,
+      xPct: 30 + Math.round(Math.random() * 40),
+      yPct: 25 + Math.round(Math.random() * 45),
+      scale: 1,
+      rotation: 0,
+    };
+    setPlacedStickers((prev) => [...prev, newItem]);
+    realtimeClient.sendEditorOperation('add-sticker', { placedSticker: newItem });
+    return instanceId;
+  };
+
+  const handleUpdatePlacedSticker = (
+    instanceId: string,
+    patch: Partial<Pick<PlacedSticker, 'xPct' | 'yPct' | 'scale' | 'rotation'>>
+  ) => {
+    setPlacedStickers((prev) =>
+      prev.map((ps) => (ps.instanceId === instanceId ? { ...ps, ...patch } : ps))
     );
-    realtimeClient.sendEditorOperation('toggle-sticker', { stickerId: id });
+    realtimeClient.sendEditorOperation('update-sticker', { instanceId, patch });
+  };
+
+  const handleRemovePlacedSticker = (instanceId: string) => {
+    setPlacedStickers((prev) => prev.filter((ps) => ps.instanceId !== instanceId));
+    realtimeClient.sendEditorOperation('remove-sticker', { instanceId });
   };
 
   const handleUndoByOwner = (owner: 'host' | 'guest') => {
@@ -219,13 +264,20 @@ export const App: React.FC = () => {
       realtimeClient.sendPersonalUndo(owner);
       return;
     }
-    setStickers((prev) =>
-      prev.map((s) => (s.owner === owner ? { ...s, active: false } : s))
-    );
+    setPlacedStickers((prev) => {
+      const idx = [...prev].reverse().findIndex((ps) => ps.owner === owner);
+      if (idx === -1) return prev;
+      const realIdx = prev.length - 1 - idx;
+      return prev.filter((_, i) => i !== realIdx);
+    });
   };
 
   return (
     <>
+      <a href="#main-content" className="skip-link">
+        Lewati ke Konten Utama
+      </a>
+
       <SeasonalAmbient
         season={season}
         isNight={isNight}
@@ -241,7 +293,7 @@ export const App: React.FC = () => {
       />
 
       <div className="app-shell">
-        <main>
+        <main id="main-content" tabIndex={-1}>
           {activeScreen === 'home' && (
             <HomeScreen
               mode={mode}
@@ -356,7 +408,10 @@ export const App: React.FC = () => {
               caption={caption}
               onChangeCaption={handleChangeCaption}
               stickers={stickers}
-              onToggleSticker={handleToggleSticker}
+              placedStickers={placedStickers}
+              onAddPlacedSticker={handleAddPlacedSticker}
+              onUpdatePlacedSticker={handleUpdatePlacedSticker}
+              onRemovePlacedSticker={handleRemovePlacedSticker}
               onUndoByOwner={handleUndoByOwner}
               realtimeState={realtimeState}
               onNavigate={setActiveScreen}
@@ -383,6 +438,7 @@ export const App: React.FC = () => {
               stripTint={stripTint}
               caption={caption}
               stickers={stickers}
+              placedStickers={placedStickers}
               onNavigate={setActiveScreen}
             />
           )}

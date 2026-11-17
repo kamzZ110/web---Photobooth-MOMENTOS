@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  CLASSIC_TEMPLATE_PRESETS,
   PHOTO_FILTER_PRESETS,
   type BoothMode,
   type CameraPermissionState,
@@ -47,8 +46,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   onChangeTakeCount,
   selectedFilter,
   onChangeFilter,
-  layout = 'strip-1x4',
-  onChangeLayout,
   frames,
   onCaptureFrame,
   realtimeState,
@@ -68,8 +65,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const [flashActive, setFlashActive] = useState(false);
   const [currentShot, setCurrentShot] = useState(0);
   const [isAutoBursting, setIsAutoBursting] = useState(false);
-  const [activePopover, setActivePopover] = useState<'none' | 'filters' | 'frame'>('none');
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [showFiltersPopover, setShowFiltersPopover] = useState(false);
+  const [copiedType, setCopiedType] = useState<'none' | 'code' | 'link'>('none');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -80,13 +77,15 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const activeFilterObj =
     PHOTO_FILTER_PRESETS.find((f) => f.id === selectedFilter) ??
     PHOTO_FILTER_PRESETS[0];
-  const activeLayoutObj =
-    CLASSIC_TEMPLATE_PRESETS.find((t) => t.id === layout) ??
-    CLASSIC_TEMPLATE_PRESETS[0];
 
   const activeRole = realtimeState?.role ?? 'host';
   const liveSnapshot = realtimeState?.snapshot;
   const roomCode = liveSnapshot?.code ?? 'MMT-4829';
+
+  const shareInviteUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}?room=${roomCode}`
+      : `?room=${roomCode}`;
 
   useEffect(() => {
     let active = true;
@@ -119,7 +118,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         const msg =
           err instanceof Error
             ? err.message
-            : 'Kamera tidak tersedia — beralih otomatis ke Mode Simulasi.';
+            : 'Kamera tidak tersedia — memakai preview simulasi.';
         setCameraError(msg);
         setUseSimulation(true);
       }
@@ -179,7 +178,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     }
   };
 
-  // Synchronized countdown listener for Duo WebSocket / BroadcastChannel
   useEffect(() => {
     const sched = realtimeState?.lastScheduledCountdown;
     if (!sched || sched.attemptId === lastHandledAttemptRef.current) return;
@@ -213,7 +211,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
 
   const triggerSingleShot = (slotOverride?: number) => {
     if (countdown !== null || isAutoBursting) return;
-    setActivePopover('none');
+    setShowFiltersPopover(false);
     const targetIndex = slotOverride ?? currentShot;
 
     if (mode === 'duo' && liveSnapshot) {
@@ -241,7 +239,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
 
   const triggerAutoCaptureSequence = () => {
     if (countdown !== null || isAutoBursting) return;
-    setActivePopover('none');
+    setShowFiltersPopover(false);
     setIsAutoBursting(true);
     let idx = 0;
 
@@ -271,10 +269,11 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     runStep();
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard?.writeText(roomCode).catch(() => {});
-    setCopiedCode(true);
-    window.setTimeout(() => setCopiedCode(false), 1800);
+  const handleCopy = (type: 'code' | 'link') => {
+    const value = type === 'code' ? roomCode : shareInviteUrl;
+    navigator.clipboard?.writeText(value).catch(() => {});
+    setCopiedType(type);
+    window.setTimeout(() => setCopiedType('none'), 2000);
   };
 
   const capturedCount = frames
@@ -323,7 +322,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           ))}
         </div>
 
-        {/* Minimal Top Header Bar above Viewfinder */}
+        {/* Minimal Header Bar above Viewfinder (No Webcam/Simulasi toggle!) */}
         <div
           style={{
             display: 'flex',
@@ -338,9 +337,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             type="button"
             className="btn btn-lift"
             style={{ minHeight: 36, padding: '6px 14px', fontSize: '0.8rem' }}
-            onClick={() => onNavigate('frame-select')}
+            onClick={() => onNavigate('room')}
           >
-            ← Ganti Frame ({activeLayoutObj.name})
+            ← Ganti Mode
           </button>
 
           <div
@@ -351,53 +350,29 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             {currentShot + 1}/{takeCount} ({capturedCount} tersimpan)
           </div>
 
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button
-              type="button"
-              className={`btn ${!useSimulation ? 'active-pill' : ''}`}
-              style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
-              onClick={() => {
-                setPermissionState('granted');
-                setUseSimulation(false);
+          {devices.length > 1 && !useSimulation && (
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              style={{
+                height: 34,
+                borderRadius: 999,
+                border: '1.5px solid #18181B',
+                padding: '0 10px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                background: '#FFFFFF',
+                color: '#18181B',
               }}
+              aria-label="Pilih Kamera"
             >
-              📷 Webcam
-            </button>
-            <button
-              type="button"
-              className={`btn ${useSimulation ? 'active-pill' : ''}`}
-              style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
-              onClick={() => {
-                setPermissionState('granted');
-                setUseSimulation(true);
-              }}
-            >
-              🎭 Simulasi
-            </button>
-            {devices.length > 1 && !useSimulation && (
-              <select
-                value={selectedDeviceId}
-                onChange={(e) => setSelectedDeviceId(e.target.value)}
-                style={{
-                  height: 34,
-                  borderRadius: 999,
-                  border: '1.5px solid #18181B',
-                  padding: '0 10px',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  background: '#FFFFFF',
-                  color: '#18181B',
-                }}
-                aria-label="Pilih Kamera"
-              >
-                {devices.map((d, idx) => (
-                  <option key={d.deviceId || idx} value={d.deviceId}>
-                    {d.label || `Kamera ${idx + 1}`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+              {devices.map((d, idx) => (
+                <option key={d.deviceId || idx} value={d.deviceId}>
+                  {d.label || `Kamera ${idx + 1}`}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {cameraError && (
@@ -428,12 +403,12 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 setUseSimulation(false);
               }}
             >
-              Coba Webcam Lagi
+              Coba Aktifkan Webcam
             </button>
           </div>
         )}
 
-        {/* Main Focused Studio Stage: Centered Viewfinder + Right Side Thumbnails */}
+        {/* Main Focused Studio Stage */}
         {permissionState === 'denied' ? (
           <div
             className="clean-card surface-light"
@@ -459,27 +434,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             </button>
           </div>
         ) : (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'stretch',
-              gap: 14,
-            }}
-          >
+          <div className="camera-stage-row">
             {/* Centered Rounded Viewfinder */}
             <div
-              style={{
-                flex: 1,
-                position: 'relative',
-                borderRadius: 22,
-                border: '2px solid #18181B',
-                background: '#111115',
-                boxShadow: '6px 6px 0px #18181B',
-                minHeight: 410,
-                overflow: 'hidden',
-                display: 'grid',
-                gridTemplateColumns: mode === 'duo' ? '1fr 1fr' : '1fr',
-              }}
+              className={`camera-viewfinder-grid ${mode === 'duo' ? 'is-duo' : ''}`}
             >
               {flashActive && (
                 <div
@@ -730,17 +688,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
               </div>
             </div>
 
-            {/* Right-Side Vertical Captured Thumbnails (like Reference Video 3) */}
-            <div
-              style={{
-                width: 86,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                gap: 10,
-                flexShrink: 0,
-              }}
-            >
+            {/* Right-Side Vertical Captured Thumbnails (clean, no label inside!) */}
+            <div className="camera-side-thumbs">
               {frames.slice(0, takeCount).map((fr, idx) => (
                 <button
                   key={fr.id}
@@ -802,10 +751,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           </div>
         )}
 
-        {/* Inline Duo Invite Bar (Only in Duo Mode — clean & right under camera!) */}
+        {/* Inline Duo Invite Bar (Share Code + Share Link right under camera!) */}
         {mode === 'duo' && (
           <div
-            className="clean-card surface-light"
+            className="clean-card card-tone-neutral"
             style={{
               marginTop: 14,
               padding: '12px 16px',
@@ -817,17 +766,25 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span className="pill-tag" style={{ fontSize: '0.72rem', fontWeight: 800 }}>
+              <span
+                className="pill-tag"
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  background: '#FFFFFF',
+                  color: '#18181B',
+                }}
+              >
                 🔒 Kode: {roomCode}
               </span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#52525B' }}>
+              <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
                 {realtimeState?.webrtcState === 'connected'
                   ? '🟢 WebRTC Video Aktif'
                   : realtimeState?.webrtcState === 'relay'
                   ? '🟣 WebRTC TURN Relay Aktif'
                   : (liveSnapshot?.participants.length ?? 0) >= 2
                   ? '🟢 Partner Terhubung (2/2)'
-                  : '⏳ Bagikan kode ke 1 teman untuk masuk'}
+                  : '⏳ Bagikan kode atau link ke 1 teman untuk masuk'}
               </span>
             </div>
 
@@ -836,9 +793,17 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 type="button"
                 className="btn btn-lift"
                 style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
-                onClick={handleCopyCode}
+                onClick={() => handleCopy('code')}
               >
-                {copiedCode ? '✓ Kode Disalin' : '📋 Salin Kode'}
+                {copiedType === 'code' ? '✓ Kode Disalin' : '📋 Salin Kode'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary-pop"
+                style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
+                onClick={() => handleCopy('link')}
+              >
+                {copiedType === 'link' ? '✓ Link Disalin!' : '🔗 Salin Link Undangan'}
               </button>
               <button
                 type="button"
@@ -846,7 +811,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
                 onClick={() => void realtimeClient.startWebRtcNegotiation()}
               >
-                🔗 Video P2P
+                📡 Video P2P
               </button>
               <button
                 type="button"
@@ -862,12 +827,13 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
               </button>
               <button
                 type="button"
-                className="btn btn-lift"
+                className="btn btn-lift surface-light"
                 style={{
                   minHeight: 34,
                   padding: '4px 10px',
                   fontSize: '0.74rem',
                   background: hostReady && guestReady ? '#ECF3ED' : '#FFFFFF',
+                  color: '#18181B',
                 }}
                 onClick={() => {
                   const next = !(hostReady && guestReady);
@@ -882,7 +848,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           </div>
         )}
 
-        {/* Floating Popover Tray + Minimal Bottom Camera Controls */}
+        {/* Filter-Only Popover + Minimal Bottom Camera Controls */}
         <div
           style={{
             position: 'relative',
@@ -893,8 +859,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             gap: 12,
           }}
         >
-          {/* Floating Filter Popover */}
-          {activePopover === 'filters' && (
+          {showFiltersPopover && (
             <div
               className="clean-card surface-light"
               style={{
@@ -920,7 +885,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   type="button"
                   className="btn"
                   style={{ minHeight: 28, padding: '2px 10px', fontSize: '0.76rem' }}
-                  onClick={() => setActivePopover('none')}
+                  onClick={() => setShowFiltersPopover(false)}
                 >
                   ✕ Tutup
                 </button>
@@ -959,84 +924,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             </div>
           )}
 
-          {/* Floating Frame Quick-Switch Popover */}
-          {activePopover === 'frame' && onChangeLayout && (
-            <div
-              className="clean-card surface-light"
-              style={{
-                width: '100%',
-                maxWidth: 620,
-                padding: '14px 16px',
-                background: '#FFFFFF',
-                zIndex: 20,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 10,
-                }}
-              >
-                <strong style={{ fontSize: '0.84rem', color: '#18181B' }}>
-                  🖼️ Ganti Cepat Gaya Frame ({activeLayoutObj.name})
-                </strong>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ minHeight: 28, padding: '2px 10px', fontSize: '0.76rem' }}
-                  onClick={() => setActivePopover('none')}
-                >
-                  ✕ Tutup
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {CLASSIC_TEMPLATE_PRESETS.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    className={`btn btn-lift ${layout === tpl.id ? 'active-pill' : ''}`}
-                    style={{ minHeight: 36, padding: '4px 12px', fontSize: '0.78rem' }}
-                    onClick={() => onChangeLayout(tpl.id)}
-                  >
-                    {tpl.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 2 Small Trigger Icons for Filters & Frame (No clutter on screen) */}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className={`btn btn-lift ${
-                activePopover === 'filters' ? 'active-pill' : ''
-              }`}
-              style={{ minHeight: 38, padding: '6px 14px', fontSize: '0.8rem' }}
-              onClick={() =>
-                setActivePopover((prev) => (prev === 'filters' ? 'none' : 'filters'))
-              }
-            >
-              ✨ Filters: {activeFilterObj.name}
-            </button>
-
-            <button
-              type="button"
-              className={`btn btn-lift ${
-                activePopover === 'frame' ? 'active-pill' : ''
-              }`}
-              style={{ minHeight: 38, padding: '6px 14px', fontSize: '0.8rem' }}
-              onClick={() =>
-                setActivePopover((prev) => (prev === 'frame' ? 'none' : 'frame'))
-              }
-            >
-              🖼️ Frame: {activeLayoutObj.name}
-            </button>
-          </div>
-
-          {/* Primary Compact Shutter Row */}
+          {/* Primary Compact Shutter Row (Only Mirror, Filter Popover, Capture, & Finish) */}
           <div
             style={{
               display: 'flex',
@@ -1054,6 +942,15 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
               title="Balik cermin kamera"
             >
               🪞 {mirror ? 'Mirror ON' : 'Mirror OFF'}
+            </button>
+
+            <button
+              type="button"
+              className={`btn btn-lift ${showFiltersPopover ? 'active-pill' : ''}`}
+              style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
+              onClick={() => setShowFiltersPopover((prev) => !prev)}
+            >
+              ✨ Filter: {activeFilterObj.name}
             </button>
 
             <button

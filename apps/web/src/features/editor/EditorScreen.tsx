@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   CLASSIC_TEMPLATE_PRESETS,
   PHOTO_FILTER_PRESETS,
   type BoothMode,
   type CapturedFrame,
   type PhotoFilterId,
+  type PlacedSticker,
   type ScreenId,
   type StickerCategory,
   type StickerItem,
@@ -34,7 +35,13 @@ interface EditorScreenProps {
   caption: string;
   onChangeCaption: (text: string) => void;
   stickers: StickerItem[];
-  onToggleSticker: (id: string) => void;
+  placedStickers: PlacedSticker[];
+  onAddPlacedSticker: (sticker: StickerItem) => string;
+  onUpdatePlacedSticker: (
+    instanceId: string,
+    patch: Partial<Pick<PlacedSticker, 'xPct' | 'yPct' | 'scale' | 'rotation'>>
+  ) => void;
+  onRemovePlacedSticker: (instanceId: string) => void;
   onUndoByOwner: (owner: 'host' | 'guest') => void;
   realtimeState?: RealtimeClientState;
   onNavigate: (screen: ScreenId) => void;
@@ -68,21 +75,33 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
   caption,
   onChangeCaption,
   stickers,
-  onToggleSticker,
+  placedStickers,
+  onAddPlacedSticker,
+  onUpdatePlacedSticker,
+  onRemovePlacedSticker,
   onUndoByOwner,
   realtimeState,
   onNavigate,
 }) => {
-  const [activeTab, setActiveTab] = useState<CustomizeTabId>('bg');
+  const [activeTab, setActiveTab] = useState<CustomizeTabId>('stickers');
   const [stickerTab, setStickerTab] = useState<'all' | StickerCategory>('all');
+  const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
   const [disconnectPaused, setDisconnectPaused] = useState(false);
   const [showRetakePicker, setShowRetakePicker] = useState(false);
   const [showDateStamp, setShowDateStamp] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
 
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{
+    instanceId: string;
+    startX: number;
+    startY: number;
+    origXPct: number;
+    origYPct: number;
+  } | null>(null);
+
   const visibleFrames = frames.slice(0, takeCount);
-  const activeStickers = stickers.filter((s) => s.active);
   const filteredStickers =
     stickerTab === 'all'
       ? stickers
@@ -102,6 +121,9 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
   const isFilm35mm = layout === 'film-35mm';
   const isTicket = layout === 'vintage-ticket';
   const isScrapbook = layout === 'editorial-scrapbook';
+  const isPolaroid = layout === 'polaroid-duo';
+  const isGridOrScrapbook = layout === 'grid-2x2' || isScrapbook;
+
   const effectiveBg = isFilm35mm
     ? '#181619'
     : isTicket && stripTint === '#FFFFFF'
@@ -111,9 +133,40 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
     : stripTint;
   const isDarkPaper = effectiveBg === '#18181B' || isFilm35mm;
 
+  const selectedPlaced = placedStickers.find(
+    (ps) => ps.instanceId === selectedStickerId
+  );
+
+  // Drag handler over the photostrip canvas (Canva-style free positioning)
+  useEffect(() => {
+    const handlePointerMove = (ev: PointerEvent) => {
+      const drag = dragStateRef.current;
+      const box = stripRef.current;
+      if (!drag || !box) return;
+      const rect = box.getBoundingClientRect();
+      const dxPct = ((ev.clientX - drag.startX) / rect.width) * 100;
+      const dyPct = ((ev.clientY - drag.startY) / rect.height) * 100;
+      const nextX = Math.max(6, Math.min(94, Math.round(drag.origXPct + dxPct)));
+      const nextY = Math.max(5, Math.min(95, Math.round(drag.origYPct + dyPct)));
+      onUpdatePlacedSticker(drag.instanceId, { xPct: nextX, yPct: nextY });
+    };
+
+    const handlePointerUp = () => {
+      dragStateRef.current = null;
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [onUpdatePlacedSticker]);
+
   const handleQuickDownload = async () => {
     setIsSaving(true);
     setSavedNotice(false);
+    setSelectedStickerId(null);
     try {
       const url = await renderClassicCompositeDataUrl({
         mode,
@@ -123,6 +176,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
         selectedFilter,
         caption,
         stickers,
+        placedStickers,
         format: 'png',
       });
       triggerFileDownload(url, `momentos-${mode}-${layout}.png`);
@@ -181,8 +235,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
             Hasil <span className="font-upright-serif">sempurna!</span>
           </h1>
           <p className="text-muted">
-            Hias frame lewat tab per sesi di sebelah kanan, atau langsung simpan ke
-            perangkatmu.
+            Klik stiker lalu geser, ubah ukuran, atau putar langsung di atas foto ala Canva.
           </p>
         </div>
 
@@ -264,15 +317,8 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
         )}
 
         {/* Two-Column Result + Tabbed Customize Workspace */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.05fr) minmax(300px, 0.95fr)',
-            gap: 28,
-            alignItems: 'start',
-          }}
-        >
-          {/* LEFT: Printed Photo Slot + Preview + Primary Actions */}
+        <div className="editor-workspace-grid">
+          {/* LEFT: Printed Photo Slot + Fixed-Proportion Interactive Strip + Actions */}
           <div
             className="clean-card surface-light"
             style={{
@@ -281,7 +327,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: 18,
+              gap: 16,
             }}
           >
             {/* Printer Dispenser Slot Accent */}
@@ -300,12 +346,14 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
               />
             </div>
 
-            {/* Rendered Strip Preview */}
+            {/* Interactive Strip Canvas with Fixed Aspect Ratio Photo Slots */}
             <div
+              ref={stripRef}
+              onClick={() => setSelectedStickerId(null)}
               style={{
                 position: 'relative',
                 zIndex: 2,
-                width: layout === 'grid-2x2' || isScrapbook ? 350 : 264,
+                width: isGridOrScrapbook ? 356 : 276,
                 background: effectiveBg,
                 backgroundImage: isScrapbook
                   ? 'radial-gradient(#d8c8b6 1px, transparent 1px)'
@@ -313,10 +361,16 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                 backgroundSize: isScrapbook ? '16px 16px' : undefined,
                 color: isDarkPaper ? '#FAF3EA' : '#18181B',
                 border: isFilm35mm ? '2px solid #322E34' : '2px solid #18181B',
-                borderRadius: isTicket ? 14 : isFilm35mm ? 10 : 18,
-                padding: isFilm35mm ? '16px 24px' : 18,
+                borderRadius: isTicket ? 12 : isFilm35mm ? 8 : 12,
+                padding: isFilm35mm
+                  ? '14px 24px 16px'
+                  : isPolaroid
+                  ? '14px 14px 20px'
+                  : '14px 14px 18px',
                 boxShadow: '6px 6px 0px #18181B',
                 transition: 'background 0.2s ease',
+                userSelect: 'none',
+                touchAction: 'none',
               }}
             >
               {/* 35mm Film Sprocket Holes */}
@@ -325,12 +379,13 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                   <div
                     style={{
                       position: 'absolute',
-                      top: 16,
-                      bottom: 16,
-                      left: 7,
+                      top: 14,
+                      bottom: 14,
+                      left: 6,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
+                      pointerEvents: 'none',
                     }}
                   >
                     {Array.from({ length: 12 }).map((_, i) => (
@@ -349,12 +404,13 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                   <div
                     style={{
                       position: 'absolute',
-                      top: 16,
-                      bottom: 16,
-                      right: 7,
+                      top: 14,
+                      bottom: 14,
+                      right: 6,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'space-between',
+                      pointerEvents: 'none',
                     }}
                   >
                     {Array.from({ length: 12 }).map((_, i) => (
@@ -382,7 +438,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     fontWeight: 800,
                     letterSpacing: '0.08em',
                     color: '#9E325F',
-                    borderBottom: '1.5px solid rgba(158,50,95,0.35)',
+                    borderBottom: '1.5px dashed rgba(158,50,95,0.4)',
                     paddingBottom: 6,
                     marginBottom: 10,
                   }}
@@ -398,7 +454,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     display: 'flex',
                     justifyContent: 'space-between',
                     fontFamily: 'monospace',
-                    fontSize: '0.65rem',
+                    fontSize: '0.62rem',
                     fontWeight: 700,
                     color: '#E09F5A',
                     marginBottom: 8,
@@ -413,69 +469,19 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                 <div style={{ textAlign: 'center', marginBottom: 10 }}>
                   <div
                     className="font-upright-serif"
-                    style={{ fontSize: '1.12rem', color: '#2A1F1D' }}
+                    style={{ fontSize: '1.1rem', color: '#2A1F1D' }}
                   >
                     Little Moments Journal
                   </div>
-                  <div
-                    style={{
-                      fontSize: '0.6rem',
-                      letterSpacing: '0.14em',
-                      fontWeight: 700,
-                      color: '#BC4374',
-                    }}
-                  >
-                    SCRAPBOOK EDITION
-                  </div>
                 </div>
               )}
 
-              {activeStickers.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {activeStickers.map((st) => {
-                    const isTape = st.category === 'tape';
-                    const isStamp = st.category === 'stamp';
-                    return (
-                      <span
-                        key={st.id}
-                        style={{
-                          fontSize: isStamp || isTape ? '0.64rem' : '0.74rem',
-                          fontWeight: 700,
-                          fontFamily: isStamp ? 'monospace' : undefined,
-                          padding: isTape ? '3px 10px' : '3px 8px',
-                          borderRadius: isTape ? 3 : isStamp ? 6 : 999,
-                          background: isTape
-                            ? 'rgba(232, 156, 182, 0.85)'
-                            : isStamp
-                            ? '#FFFDF9'
-                            : '#FFFFFF',
-                          color: isStamp ? '#BC4374' : '#18181B',
-                          border: isStamp
-                            ? '1.5px dashed #BC4374'
-                            : isTape
-                            ? 'none'
-                            : '1.5px solid #18181B',
-                          transform: isTape
-                            ? 'rotate(-2deg)'
-                            : isStamp
-                            ? 'rotate(2deg)'
-                            : undefined,
-                        }}
-                      >
-                        {st.emoji} {st.badgeText ?? st.label}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Photos Grid */}
+              {/* Full-Bleed Clean Photos Grid (Zero labels/text inside photo slots!) */}
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns:
-                    layout === 'grid-2x2' || isScrapbook ? '1fr 1fr' : '1fr',
-                  gap: isScrapbook ? 12 : 9,
+                  gridTemplateColumns: isGridOrScrapbook ? '1fr 1fr' : '1fr',
+                  gap: isScrapbook ? 12 : isPolaroid ? 12 : 9,
                   filter: activeFilter.cssFilter,
                   transition: 'filter 0.25s ease',
                 }}
@@ -485,98 +491,90 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     key={fr.id}
                     style={{
                       position: 'relative',
-                      background: isScrapbook ? '#FFFFFF' : fr.accentBg,
+                      background: isScrapbook || isPolaroid ? '#FFFFFF' : fr.accentBg,
                       border: isFilm35mm
                         ? '1.5px solid rgba(224,159,90,0.45)'
                         : isScrapbook
                         ? '1px solid #DFD3C3'
                         : '1.5px solid #18181B',
-                      borderRadius: isScrapbook ? 6 : 10,
+                      borderRadius: isScrapbook ? 4 : isPolaroid ? 6 : 4,
                       padding: isScrapbook
-                        ? '8px 8px 18px'
-                        : layout === 'polaroid-duo'
-                        ? '14px 8px'
-                        : '10px 8px',
+                        ? '6px 6px 14px'
+                        : isPolaroid
+                        ? '6px 6px 14px'
+                        : 0,
                       transform: isScrapbook
-                        ? `rotate(${idx % 2 === 0 ? '-2.2deg' : '2.2deg'})`
+                        ? `rotate(${idx % 2 === 0 ? '-2deg' : '2deg'})`
                         : undefined,
-                      color: '#18181B',
-                      display: 'flex',
-                      flexDirection: isScrapbook ? 'column' : 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 6,
+                      overflow: 'hidden',
                     }}
                   >
-                    <span
+                    {/* Fixed Aspect Ratio Photo Aperture (like Gambar 5!) */}
+                    <div
                       style={{
-                        fontSize: '0.62rem',
-                        fontWeight: 800,
-                        fontFamily: isFilm35mm ? 'monospace' : undefined,
-                        color: isFilm35mm ? '#E09F5A' : '#18181B',
+                        width: '100%',
+                        aspectRatio: isPolaroid
+                          ? '4 / 3'
+                          : isGridOrScrapbook
+                          ? '4 / 3'
+                          : '3 / 2',
+                        overflow: 'hidden',
+                        background: fr.accentBg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      {isFilm35mm ? `▶ 0${idx + 1}A` : fr.label}
-                    </span>
-                    {mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl ? (
-                      <div
-                        style={{
-                          width: isScrapbook ? '100%' : '68%',
-                          height: isScrapbook ? 108 : 88,
-                          borderRadius: isScrapbook ? 4 : 8,
-                          overflow: 'hidden',
-                          display: 'flex',
-                        }}
-                      >
+                      {mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl ? (
+                        <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                          <img
+                            src={fr.imageDataUrl}
+                            alt={`Host ${idx + 1}`}
+                            draggable={false}
+                            style={{ width: '50%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <img
+                            src={fr.guestImageDataUrl}
+                            alt={`Guest ${idx + 1}`}
+                            draggable={false}
+                            style={{
+                              width: '50%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              borderLeft: '2px solid rgba(255,255,255,0.85)',
+                            }}
+                          />
+                        </div>
+                      ) : fr.imageDataUrl ? (
                         <img
                           src={fr.imageDataUrl}
-                          alt={`${fr.label} Host`}
-                          style={{ width: '50%', height: '100%', objectFit: 'cover' }}
-                        />
-                        <img
-                          src={fr.guestImageDataUrl}
-                          alt={`${fr.label} Guest`}
+                          alt={`Pose ${idx + 1}`}
+                          draggable={false}
                           style={{
-                            width: '50%',
+                            width: '100%',
                             height: '100%',
                             objectFit: 'cover',
-                            borderLeft: '1.5px solid rgba(255,255,255,0.8)',
+                            display: 'block',
                           }}
                         />
-                      </div>
-                    ) : fr.imageDataUrl ? (
-                      <img
-                        src={fr.imageDataUrl}
-                        alt={fr.label}
-                        style={{
-                          width: isScrapbook ? '100%' : '68%',
-                          height: isScrapbook ? 108 : 88,
-                          objectFit: 'cover',
-                          borderRadius: isScrapbook ? 4 : 8,
-                          display: 'block',
-                        }}
-                      />
-                    ) : (
-                      <span style={{ fontSize: isScrapbook ? '1.9rem' : '1.4rem' }}>
-                        {mode === 'duo'
-                          ? `${fr.hostPose} ${fr.guestPose}`
-                          : fr.hostPose}
-                      </span>
-                    )}
+                      ) : (
+                        <span style={{ fontSize: '2.1rem' }}>
+                          {mode === 'duo'
+                            ? `${fr.hostPose} ${fr.guestPose}`
+                            : fr.hostPose}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* Strip Footer */}
+              {/* Clean Footer */}
               <div
                 style={{
                   marginTop: 12,
                   paddingTop: 8,
-                  borderTop: isFilm35mm
-                    ? '1px solid rgba(224,159,90,0.35)'
-                    : isTicket
-                    ? '2px dashed #7A6554'
-                    : '1.5px dashed rgba(24,24,27,0.22)',
+                  borderTop: isTicket ? '2px dashed #7A6554' : 'none',
                   textAlign: 'center',
                 }}
               >
@@ -605,11 +603,207 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       color: isDarkPaper ? '#E5E7EB' : '#52525B',
                     }}
                   >
-                    15 Nov 2026 · {mode.toUpperCase()} SESSION
+                    17 Nov 2026 · {mode.toUpperCase()}
                   </div>
                 )}
               </div>
+
+              {/* FREEFORM CANVA-STYLE PLACED STICKERS OVERLAY */}
+              {placedStickers.map((ps) => {
+                const isSelected = ps.instanceId === selectedStickerId;
+                const isTapeOrStamp = ps.category === 'tape' || ps.category === 'stamp';
+                return (
+                  <div
+                    key={ps.instanceId}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      setSelectedStickerId(ps.instanceId);
+                      setActiveTab('stickers');
+                    }}
+                    onPointerDown={(ev) => {
+                      if (isPaused) return;
+                      ev.stopPropagation();
+                      setSelectedStickerId(ps.instanceId);
+                      setActiveTab('stickers');
+                      dragStateRef.current = {
+                        instanceId: ps.instanceId,
+                        startX: ev.clientX,
+                        startY: ev.clientY,
+                        origXPct: ps.xPct,
+                        origYPct: ps.yPct,
+                      };
+                    }}
+                    style={{
+                      position: 'absolute',
+                      left: `${ps.xPct}%`,
+                      top: `${ps.yPct}%`,
+                      transform: `translate(-50%, -50%) rotate(${ps.rotation}deg) scale(${ps.scale})`,
+                      zIndex: isSelected ? 40 : 25,
+                      cursor: isPaused ? 'not-allowed' : 'grab',
+                      padding: isSelected ? '3px 5px' : 2,
+                      border: isSelected ? '1.5px dashed #BC4374' : '1.5px solid transparent',
+                      borderRadius: 8,
+                      background: isSelected ? 'rgba(255,255,255,0.22)' : 'transparent',
+                    }}
+                    title="Geser untuk memindahkan stiker"
+                  >
+                    {isTapeOrStamp ? (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          fontSize: '0.68rem',
+                          fontWeight: 800,
+                          fontFamily: ps.category === 'stamp' ? 'monospace' : undefined,
+                          padding: '3px 9px',
+                          borderRadius: ps.category === 'tape' ? 3 : 6,
+                          background:
+                            ps.category === 'tape'
+                              ? 'rgba(232, 156, 182, 0.9)'
+                              : '#FFFDF9',
+                          color: ps.category === 'stamp' ? '#BC4374' : '#18181B',
+                          border:
+                            ps.category === 'stamp'
+                              ? '1.5px dashed #BC4374'
+                              : '1px solid rgba(24,24,27,0.35)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {ps.emoji} {ps.badgeText ?? ps.label}
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '2.1rem',
+                          lineHeight: 1,
+                          display: 'block',
+                          filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.25))',
+                        }}
+                      >
+                        {ps.emoji}
+                      </span>
+                    )}
+
+                    {/* Canva-Style Corner Delete & Quick Edit Badge */}
+                    {isSelected && !isPaused && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          onRemovePlacedSticker(ps.instanceId);
+                          setSelectedStickerId(null);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: -10,
+                          right: -10,
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          border: '1.5px solid #18181B',
+                          background: '#BC4374',
+                          color: '#FFFFFF',
+                          fontSize: '0.7rem',
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                        aria-label="Hapus stiker"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+
+            {/* Selected Sticker Quick Canva Bar directly beneath strip */}
+            {selectedPlaced && !isPaused && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  padding: '6px 12px',
+                  borderRadius: 999,
+                  background: '#FAF7F2',
+                  border: '1.5px solid #18181B',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  color: '#18181B',
+                }}
+              >
+                <span>{selectedPlaced.emoji} Edit Stiker:</span>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ minHeight: 26, padding: '2px 8px', fontSize: '0.74rem' }}
+                  onClick={() =>
+                    onUpdatePlacedSticker(selectedPlaced.instanceId, {
+                      scale: Math.max(0.5, Number((selectedPlaced.scale - 0.15).toFixed(2))),
+                    })
+                  }
+                >
+                  − Perkecil
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ minHeight: 26, padding: '2px 8px', fontSize: '0.74rem' }}
+                  onClick={() =>
+                    onUpdatePlacedSticker(selectedPlaced.instanceId, {
+                      scale: Math.min(2.4, Number((selectedPlaced.scale + 0.15).toFixed(2))),
+                    })
+                  }
+                >
+                  + Perbesar
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ minHeight: 26, padding: '2px 8px', fontSize: '0.74rem' }}
+                  onClick={() =>
+                    onUpdatePlacedSticker(selectedPlaced.instanceId, {
+                      rotation: selectedPlaced.rotation - 15,
+                    })
+                  }
+                >
+                  ↺ Putar
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ minHeight: 26, padding: '2px 8px', fontSize: '0.74rem' }}
+                  onClick={() =>
+                    onUpdatePlacedSticker(selectedPlaced.instanceId, {
+                      rotation: selectedPlaced.rotation + 15,
+                    })
+                  }
+                >
+                  ↻ Putar
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    minHeight: 26,
+                    padding: '2px 8px',
+                    fontSize: '0.74rem',
+                    color: '#BC4374',
+                  }}
+                  onClick={() => {
+                    onRemovePlacedSticker(selectedPlaced.instanceId);
+                    setSelectedStickerId(null);
+                  }}
+                >
+                  🗑️ Hapus
+                </button>
+              </div>
+            )}
 
             {/* Primary Result Action Buttons */}
             <div
@@ -662,7 +856,6 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
               </div>
             )}
 
-            {/* Inline Quick Retake Picker when clicked */}
             {showRetakePicker && (
               <div
                 style={{
@@ -717,7 +910,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
             )}
           </div>
 
-          {/* RIGHT: Tabbed Customize Session Panel (1 Focused Tab at a Time!) */}
+          {/* RIGHT: Tabbed Customize Session Panel */}
           <div
             className="clean-card surface-light"
             style={{
@@ -773,7 +966,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
               )}
             </div>
 
-            {/* 5 Clean Tabs (Separated Sessions!) */}
+            {/* 5 Clean Tabs */}
             <div
               style={{
                 display: 'flex',
@@ -914,7 +1107,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
               </div>
             )}
 
-            {/* TAB 3: STIKER & PERSONAL UNDO */}
+            {/* TAB 3: CANVA-STYLE INTERACTIVE STIKER & PERSONAL UNDO */}
             {activeTab === 'stickers' && (
               <div>
                 <div
@@ -922,11 +1115,15 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     fontSize: '0.82rem',
                     fontWeight: 800,
                     color: '#18181B',
-                    marginBottom: 10,
+                    marginBottom: 4,
                   }}
                 >
-                  STIKER, EMOTIKON &amp; STEMPEL
+                  TAMBAH &amp; EDIT STIKER ALA CANVA
                 </div>
+                <p style={{ fontSize: '0.76rem', color: '#52525B', marginBottom: 10 }}>
+                  Klik item di bawah untuk menempelkannya ke foto, lalu geser/besar-kecilkan/putar langsung di photostrip.
+                </p>
+
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                   {(
                     [
@@ -955,19 +1152,94 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       key={st.id}
                       type="button"
                       disabled={isPaused}
-                      className={`btn btn-lift ${st.active ? 'active-pill' : ''}`}
+                      className="btn btn-lift"
                       style={{ minHeight: 36, padding: '4px 11px', fontSize: '0.78rem' }}
-                      onClick={() => onToggleSticker(st.id)}
+                      onClick={() => {
+                        const createdId = onAddPlacedSticker(st);
+                        setSelectedStickerId(createdId);
+                      }}
                     >
-                      {st.emoji} {st.label}
-                      {mode === 'duo' && st.active && (
-                        <span style={{ marginLeft: 4, fontSize: '0.64rem', fontWeight: 800 }}>
-                          [{st.owner === 'host' ? 'H' : 'G'}]
-                        </span>
-                      )}
+                      + {st.emoji} {st.label}
                     </button>
                   ))}
                 </div>
+
+                {/* Selected Sticker Slider Controls (Canva Inspector) */}
+                {selectedPlaced && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: '#FAF7F2',
+                      border: '1.5px solid #18181B',
+                      marginBottom: 14,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                      }}
+                    >
+                      <span>
+                        Terpilih: {selectedPlaced.emoji} {selectedPlaced.label}
+                      </span>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#BC4374',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          onRemovePlacedSticker(selectedPlaced.instanceId);
+                          setSelectedStickerId(null);
+                        }}
+                      >
+                        Hapus ×
+                      </button>
+                    </div>
+                    <label style={{ fontSize: '0.74rem', fontWeight: 700 }}>
+                      Ukuran ({Math.round(selectedPlaced.scale * 100)}%)
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={2.4}
+                        step={0.05}
+                        value={selectedPlaced.scale}
+                        onChange={(e) =>
+                          onUpdatePlacedSticker(selectedPlaced.instanceId, {
+                            scale: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: '100%', accentColor: '#BC4374' }}
+                      />
+                    </label>
+                    <label style={{ fontSize: '0.74rem', fontWeight: 700 }}>
+                      Putar ({selectedPlaced.rotation}°)
+                      <input
+                        type="range"
+                        min={-180}
+                        max={180}
+                        step={5}
+                        value={selectedPlaced.rotation}
+                        onChange={(e) =>
+                          onUpdatePlacedSticker(selectedPlaced.instanceId, {
+                            rotation: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: '100%', accentColor: '#BC4374' }}
+                      />
+                    </label>
+                  </div>
+                )}
 
                 <div
                   style={{

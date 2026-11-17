@@ -32,8 +32,6 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
   realtimeState,
   onNavigate,
 }) => {
-  const [hostName, setHostName] = useState('Host');
-  const [guestName, setGuestName] = useState('Nadia');
   const [guestInputCode, setGuestInputCode] = useState('');
 
   const liveSnapshot = realtimeState.snapshot;
@@ -55,9 +53,9 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
     onNavigate('frame-select');
   };
 
-  const handleStartDuo = () => {
+  const handleStartDuoAsHost = () => {
     onChangeMode('duo');
-    realtimeClient.createRoom({ displayName: hostName || 'Host', mode: 'duo' });
+    realtimeClient.createRoom({ displayName: 'Host', mode: 'duo' });
     onNavigate('frame-select');
   };
 
@@ -65,7 +63,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
     const code = guestInputCode.trim().toUpperCase();
     if (!code) return;
     onChangeMode('duo');
-    realtimeClient.joinRoom(code, guestName || 'Guest');
+    realtimeClient.joinRoom(code, 'Guest');
     onNavigate('camera');
   };
 
@@ -170,19 +168,19 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
           </div>
         )}
 
-        {/* 3 Clean Mode Cards */}
+        {/* 3 Clean Mode Cards (Night-mode contrast safe!) */}
         <div className="grid-3" style={{ marginBottom: 22 }}>
           {/* 1. Solo Booth */}
           <div
-            className={`clean-card interactive surface-light ${
-              mode === 'solo' ? 'card-tone-rose' : ''
+            className={`clean-card interactive ${
+              mode === 'solo' ? 'card-tone-rose surface-light' : 'card-tone-neutral'
             }`}
             style={{
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               gap: 18,
-              borderColor: mode === 'solo' ? '#BC4374' : '#18181B',
+              borderColor: mode === 'solo' ? '#BC4374' : undefined,
             }}
           >
             <div>
@@ -194,7 +192,14 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
                   marginBottom: 14,
                 }}
               >
-                <span className="pill-tag" style={{ fontSize: '0.7rem' }}>
+                <span
+                  className="pill-tag"
+                  style={{
+                    fontSize: '0.7rem',
+                    background: '#FFFFFF',
+                    color: '#18181B',
+                  }}
+                >
                   1 Peserta
                 </span>
                 <MiniCameraStripIcon accentColor="#C93B6B" size={34} />
@@ -218,17 +223,17 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
             </button>
           </div>
 
-          {/* 2. Duo Booth */}
+          {/* 2. Duo Booth (No name input, enters directly as Host) */}
           <div
-            className={`clean-card interactive surface-light ${
-              mode === 'duo' ? 'card-tone-sky' : ''
+            className={`clean-card interactive ${
+              mode === 'duo' ? 'card-tone-sky surface-light' : 'card-tone-neutral'
             }`}
             style={{
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               gap: 18,
-              borderColor: mode === 'duo' ? '#2563EB' : '#18181B',
+              borderColor: mode === 'duo' ? '#2563EB' : undefined,
             }}
           >
             <div>
@@ -256,43 +261,25 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
               <h2 className="heading-h2" style={{ marginBottom: 8 }}>
                 Duo Booth (Room Privat)
               </h2>
-              <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: 12 }}>
-                Foto real-time berdua jarak jauh dengan 1 teman. Undang dengan kode privat
-                langsung dari kamera.
+              <p className="text-muted" style={{ fontSize: '0.9rem' }}>
+                Foto real-time berdua jarak jauh dengan 1 teman. Langsung jadi Host dan
+                bagikan kode atau link undangan dari kamera.
               </p>
-              <input
-                type="text"
-                aria-label="Nama Host"
-                placeholder="Nama kamu (Host)"
-                value={hostName}
-                onChange={(e) => setHostName(e.target.value)}
-                style={{
-                  width: '100%',
-                  height: 36,
-                  padding: '0 12px',
-                  borderRadius: 999,
-                  border: '1.5px solid #18181B',
-                  background: '#FFFFFF',
-                  color: '#18181B',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                }}
-              />
             </div>
 
             <button
               type="button"
               className="btn btn-secondary-pop"
               style={{ width: '100%' }}
-              onClick={handleStartDuo}
+              onClick={handleStartDuoAsHost}
             >
-              Buat Room Duo →
+              Mulai Duo (Jadi Host) →
             </button>
           </div>
 
           {/* 3. Flipbook Studio */}
           <div
-            className="clean-card interactive surface-light card-tone-cream"
+            className="clean-card interactive card-tone-cream surface-light"
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -309,7 +296,14 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
                   marginBottom: 14,
                 }}
               >
-                <span className="pill-tag" style={{ fontSize: '0.7rem' }}>
+                <span
+                  className="pill-tag"
+                  style={{
+                    fontSize: '0.7rem',
+                    background: '#FFFFFF',
+                    color: '#18181B',
+                  }}
+                >
                   🎞️ Gerak · 30 Frame
                 </span>
                 <MiniCameraStripIcon accentColor="#B6834D" size={34} />
@@ -334,9 +328,9 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
           </div>
         </div>
 
-        {/* Single Sleek "Punya Kode Room?" Join Bar */}
+        {/* Single Sleek "Punya Kode Room?" Join Bar (Adaptive card-tone-neutral for Night Mode!) */}
         <div
-          className="clean-card surface-light"
+          className="clean-card card-tone-neutral"
           style={{
             padding: '18px 22px',
             display: 'flex',
@@ -347,11 +341,11 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
           }}
         >
           <div style={{ minWidth: 200 }}>
-            <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#18181B' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>
               Punya Kode Undangan Room?
             </div>
-            <div style={{ fontSize: '0.82rem', color: '#52525B' }}>
-              Masukkan kode dari temanmu untuk langsung bergabung ke kamera Duo.
+            <div className="text-muted" style={{ fontSize: '0.82rem' }}>
+              Masukkan kode dari temanmu untuk langsung bergabung ke kamera Duo sebagai Guest.
             </div>
           </div>
 
@@ -366,24 +360,6 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
             }}
           >
             <input
-              type="text"
-              aria-label="Nama Guest"
-              placeholder="Namamu"
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              style={{
-                width: 120,
-                height: 42,
-                padding: '0 14px',
-                borderRadius: 999,
-                border: '1.5px solid #18181B',
-                background: '#FFFFFF',
-                color: '#18181B',
-                fontWeight: 600,
-                fontSize: '0.84rem',
-              }}
-            />
-            <input
               id="guest-code-input"
               type="text"
               placeholder="Contoh: MMT-4829"
@@ -391,7 +367,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
               value={guestInputCode}
               onChange={(e) => setGuestInputCode(e.target.value.toUpperCase())}
               style={{
-                minWidth: 165,
+                minWidth: 185,
                 height: 42,
                 padding: '0 16px',
                 borderRadius: 999,

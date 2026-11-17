@@ -432,16 +432,41 @@ export interface SyncedFrameMedia {
   updatedAt: number;
 }
 
+export interface PlacedSticker {
+  instanceId: string;
+  stickerId: string;
+  emoji: string;
+  label: string;
+  category?: StickerCategory;
+  badgeText?: string;
+  owner: ParticipantRole;
+  xPct: number;
+  yPct: number;
+  scale: number;
+  rotation: number;
+}
+
 export interface EditorOperation {
   opId: string;
   actor: ParticipantRole;
   timestamp: number;
-  kind: 'toggle-sticker' | 'set-tint' | 'set-caption' | 'set-layout' | 'set-filter';
+  kind:
+    | 'toggle-sticker'
+    | 'set-tint'
+    | 'set-caption'
+    | 'set-layout'
+    | 'set-filter'
+    | 'add-sticker'
+    | 'update-sticker'
+    | 'remove-sticker';
   stickerId?: string;
+  instanceId?: string;
   prevActive?: boolean;
   nextActive?: boolean;
   prevValue?: string;
   nextValue?: string;
+  placedSticker?: PlacedSticker;
+  prevStickerState?: PlacedSticker;
 }
 
 export interface CollaborativeEditorState {
@@ -449,6 +474,7 @@ export interface CollaborativeEditorState {
   stripTint: string;
   caption: string;
   stickers: StickerItem[];
+  placedStickers: PlacedSticker[];
   history: EditorOperation[];
   pausedByDisconnect: boolean;
   lastActor: ParticipantRole | null;
@@ -541,9 +567,18 @@ export type ClientToServerMessage =
   | {
       type: 'editor:operation';
       opId: string;
-      kind: 'toggle-sticker' | 'set-tint' | 'set-caption';
+      kind:
+        | 'toggle-sticker'
+        | 'set-tint'
+        | 'set-caption'
+        | 'add-sticker'
+        | 'update-sticker'
+        | 'remove-sticker';
       stickerId?: string;
       value?: string;
+      placedSticker?: PlacedSticker;
+      instanceId?: string;
+      patch?: Partial<Pick<PlacedSticker, 'xPct' | 'yPct' | 'scale' | 'rotation'>>;
     }
   | {
       type: 'editor:personal-undo';

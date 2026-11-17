@@ -9,6 +9,9 @@ import { RoomStore } from './roomStore.ts';
 
 const PORT = Number(process.env.PORT ?? 4000);
 const HOST = process.env.HOST ?? '0.0.0.0';
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? '*';
+const MAX_WS_BUFFER_BYTES = 4 * 1024 * 1024; // 4 MB frame guard
+const STARTED_AT = Date.now();
 const WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 interface ClientConn {
@@ -255,6 +258,9 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
         kind: msg.kind,
         stickerId: msg.stickerId,
         value: msg.value,
+        placedSticker: msg.placedSticker,
+        instanceId: msg.instanceId,
+        patch: msg.patch,
       });
       if (snap) {
         broadcastRoom(conn.roomCode, { type: 'room:snapshot', snapshot: snap });
@@ -358,9 +364,18 @@ function consumeWsFrames(conn: ClientConn): void {
 
 const server = createServer((req, res) => {
   const url = req.url ?? '/';
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': CORS_ORIGIN,
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    });
+    res.end();
+    return;
+  }
+
   res.writeHead(url.startsWith('/api/') ? 200 : 404, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': CORS_ORIGIN,
   });
 
   if (url === '/api/health') {
@@ -370,6 +385,8 @@ const server = createServer((req, res) => {
         service: '@momentos/server',
         activeRooms: store.getActiveRoomCount(),
         connectedSockets: clients.size,
+        uptimeSec: Math.round((Date.now() - STARTED_AT) / 1000),
+        maxBufferBytes: MAX_WS_BUFFER_BYTES,
         serverTime: Date.now(),
       })
     );
@@ -415,6 +432,10 @@ server.on('upgrade', (req, socket) => {
   clients.add(conn);
 
   socket.on('data', (chunk) => {
+    if (conn.pending.length + chunk.length > MAX_WS_BUFFER_BYTES) {
+      socket.destroy();
+      return;
+    }
     conn.pending = Buffer.concat([conn.pending, chunk]);
     consumeWsFrames(conn);
   });
@@ -437,6 +458,19 @@ server.on('upgrade', (req, socket) => {
 setInterval(() => {
   store.sweepExpired();
 }, 15_000);
+
+const shutdown = () => {
+  for (const conn of clients) {
+    conn.socket.destroy();
+  }
+  clients.clear();
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 server.listen(PORT, HOST, () => {
   console.log(

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "npm --workspace @momentos/web run dev",
     "dev:server": "npm --workspace @momentos/server run dev",
+    "start:server": "npm --workspace @momentos/server run start",
     "build": "npm --workspace @momentos/web run build",
     "preview": "npm --workspace @momentos/web run preview",
     "typecheck": "npm --workspace @momentos/web run typecheck && npm --workspace @momentos/server run typecheck"

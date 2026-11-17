@@ -7,6 +7,7 @@ import {
   type EditorOperation,
   type ParticipantRole,
   type PhotoFilterId,
+  type PlacedSticker,
   type RoomSessionPhase,
   type ScheduledCountdown,
   type ServerToClientMessage,
@@ -41,9 +42,13 @@ export interface RealtimeClientState {
 
 type Listener = (state: RealtimeClientState) => void;
 
+const VITE_ENV: Record<string, string | undefined> =
+  ((import.meta as unknown as { env?: Record<string, string | undefined> }).env) ?? {};
+
 const SESSION_STORAGE_KEY = 'momentos.rejoin.session.v1';
-const WS_URL = 'ws://localhost:4000/ws';
+const WS_URL = VITE_ENV.VITE_WS_URL || 'ws://localhost:4000/ws';
 const CHUNK_SIZE = 16000;
+const MAX_FRAME_DATA_URL_LENGTH = 3_500_000;
 
 interface DataChannelChunkMessage {
   type: 'frame-chunk' | 'frame-complete';
@@ -60,7 +65,8 @@ function createInitialLocalEditorState(): CollaborativeEditorState {
     editorVersion: 1,
     stripTint: '#FFFFFF',
     caption: 'Nov 14, 2026 12:02pm',
-    stickers: DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s })),
+    stickers: DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s, active: false })),
+    placedStickers: [],
     history: [],
     pausedByDisconnect: false,
     lastActor: null,
@@ -501,11 +507,25 @@ class MomentosRealtimeClient {
   }
 
   private getIceConfig(): RTCConfiguration {
+    const stunList = (
+      VITE_ENV.VITE_STUN_URLS ||
+      'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302'
+    )
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const iceServers: RTCIceServer[] = stunList.map((urls) => ({ urls }));
+    if (VITE_ENV.VITE_TURN_URL) {
+      iceServers.push({
+        urls: VITE_ENV.VITE_TURN_URL,
+        username: VITE_ENV.VITE_TURN_USERNAME,
+        credential: VITE_ENV.VITE_TURN_CREDENTIAL,
+      });
+    }
+
     return {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
+      iceServers,
       iceTransportPolicy: this.state.forceTurnRelay ? 'relay' : 'all',
     };
   }
@@ -725,6 +745,7 @@ class MomentosRealtimeClient {
   }
 
   public syncCapturedFrame(frameIndex: number, dataUrl: string): void {
+    if (!dataUrl || dataUrl.length > MAX_FRAME_DATA_URL_LENGTH) return;
     const role: ParticipantRole = this.state.role ?? 'host';
 
     // 1. Send via P2P RTCDataChannel in 16KB chunks if connected
@@ -852,8 +873,20 @@ class MomentosRealtimeClient {
   // TAHAP 6: COLLABORATIVE EDITOR & PERSONAL UNDO
   // ============================================================================
   public sendEditorOperation(
-    kind: 'toggle-sticker' | 'set-tint' | 'set-caption',
-    payload: { stickerId?: string; value?: string }
+    kind:
+      | 'toggle-sticker'
+      | 'set-tint'
+      | 'set-caption'
+      | 'add-sticker'
+      | 'update-sticker'
+      | 'remove-sticker',
+    payload: {
+      stickerId?: string;
+      value?: string;
+      placedSticker?: PlacedSticker;
+      instanceId?: string;
+      patch?: Partial<Pick<PlacedSticker, 'xPct' | 'yPct' | 'scale' | 'rotation'>>;
+    }
   ): void {
     const opId = `op-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const sent = this.sendWs({
@@ -862,6 +895,9 @@ class MomentosRealtimeClient {
       kind,
       stickerId: payload.stickerId,
       value: payload.value,
+      placedSticker: payload.placedSticker,
+      instanceId: payload.instanceId,
+      patch: payload.patch,
     });
 
     if (!sent && this.state.snapshot) {
@@ -884,14 +920,27 @@ class MomentosRealtimeClient {
   private applyLocalEditorOperation(
     actor: ParticipantRole,
     opId: string,
-    kind: 'toggle-sticker' | 'set-tint' | 'set-caption',
-    payload: { stickerId?: string; value?: string }
+    kind:
+      | 'toggle-sticker'
+      | 'set-tint'
+      | 'set-caption'
+      | 'add-sticker'
+      | 'update-sticker'
+      | 'remove-sticker',
+    payload: {
+      stickerId?: string;
+      value?: string;
+      placedSticker?: PlacedSticker;
+      instanceId?: string;
+      patch?: Partial<Pick<PlacedSticker, 'xPct' | 'yPct' | 'scale' | 'rotation'>>;
+    }
   ): void {
     if (!this.state.snapshot) return;
     const editor = this.state.snapshot.editorState;
     if (editor.pausedByDisconnect) return;
 
     const stickers = editor.stickers.map((s) => ({ ...s }));
+    const placedStickers = (editor.placedStickers ?? []).map((ps) => ({ ...ps }));
     const history: EditorOperation[] = [...editor.history];
     let stripTint = editor.stripTint;
     let caption = editor.caption;
@@ -911,6 +960,46 @@ class MomentosRealtimeClient {
         stickerId: stk.id,
         prevActive,
         nextActive: stk.active,
+      });
+    } else if (kind === 'add-sticker' && payload.placedSticker) {
+      const item: PlacedSticker = { ...payload.placedSticker, owner: actor };
+      placedStickers.push(item);
+      history.push({
+        opId,
+        actor,
+        timestamp: now,
+        kind: 'add-sticker',
+        instanceId: item.instanceId,
+        placedSticker: { ...item },
+      });
+    } else if (kind === 'update-sticker' && payload.instanceId && payload.patch) {
+      const target = placedStickers.find((ps) => ps.instanceId === payload.instanceId);
+      if (!target) return;
+      const prevStickerState: PlacedSticker = { ...target };
+      if (typeof payload.patch.xPct === 'number') target.xPct = payload.patch.xPct;
+      if (typeof payload.patch.yPct === 'number') target.yPct = payload.patch.yPct;
+      if (typeof payload.patch.scale === 'number') target.scale = payload.patch.scale;
+      if (typeof payload.patch.rotation === 'number') target.rotation = payload.patch.rotation;
+      history.push({
+        opId,
+        actor,
+        timestamp: now,
+        kind: 'update-sticker',
+        instanceId: target.instanceId,
+        prevStickerState,
+        placedSticker: { ...target },
+      });
+    } else if (kind === 'remove-sticker' && payload.instanceId) {
+      const idx = placedStickers.findIndex((ps) => ps.instanceId === payload.instanceId);
+      if (idx === -1) return;
+      const [removed] = placedStickers.splice(idx, 1);
+      history.push({
+        opId,
+        actor,
+        timestamp: now,
+        kind: 'remove-sticker',
+        instanceId: removed.instanceId,
+        prevStickerState: { ...removed },
       });
     } else if (kind === 'set-tint' && typeof payload.value === 'string') {
       const prevValue = stripTint;
@@ -945,6 +1034,7 @@ class MomentosRealtimeClient {
         stripTint,
         caption,
         stickers,
+        placedStickers,
         history,
         lastActor: actor,
       },
@@ -960,6 +1050,7 @@ class MomentosRealtimeClient {
 
     const history = [...editor.history];
     const stickers = editor.stickers.map((s) => ({ ...s }));
+    const placedStickers = (editor.placedStickers ?? []).map((ps) => ({ ...ps }));
     let stripTint = editor.stripTint;
     let caption = editor.caption;
     let layout = this.state.snapshot.layout;
@@ -974,6 +1065,16 @@ class MomentosRealtimeClient {
         if (stk && typeof op.prevActive === 'boolean') {
           stk.active = op.prevActive;
         }
+      } else if (op.kind === 'add-sticker' && op.instanceId) {
+        const idx = placedStickers.findIndex((ps) => ps.instanceId === op.instanceId);
+        if (idx >= 0) placedStickers.splice(idx, 1);
+      } else if (op.kind === 'update-sticker' && op.prevStickerState) {
+        const target = placedStickers.find(
+          (ps) => ps.instanceId === op.prevStickerState?.instanceId
+        );
+        if (target) Object.assign(target, op.prevStickerState);
+      } else if (op.kind === 'remove-sticker' && op.prevStickerState) {
+        placedStickers.push({ ...op.prevStickerState });
       } else if (op.kind === 'set-tint' && typeof op.prevValue === 'string') {
         stripTint = op.prevValue;
       } else if (op.kind === 'set-caption' && typeof op.prevValue === 'string') {
@@ -986,9 +1087,19 @@ class MomentosRealtimeClient {
     }
 
     if (!reverted) {
-      for (const stk of stickers) {
-        if (stk.owner === targetActor && stk.active) {
-          stk.active = false;
+      let removedPlaced = false;
+      for (let j = placedStickers.length - 1; j >= 0; j--) {
+        if (placedStickers[j].owner === targetActor) {
+          placedStickers.splice(j, 1);
+          removedPlaced = true;
+          break;
+        }
+      }
+      if (!removedPlaced) {
+        for (const stk of stickers) {
+          if (stk.owner === targetActor && stk.active) {
+            stk.active = false;
+          }
         }
       }
     }
@@ -1003,6 +1114,7 @@ class MomentosRealtimeClient {
         stripTint,
         caption,
         stickers,
+        placedStickers,
         history,
         lastActor: targetActor,
       },

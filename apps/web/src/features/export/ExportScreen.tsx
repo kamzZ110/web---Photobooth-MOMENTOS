@@ -5,6 +5,7 @@ import type {
   ExportFormat,
   ExportStatus,
   PhotoFilterId,
+  PlacedSticker,
   ScreenId,
   StickerItem,
   TemplateLayoutId,
@@ -25,6 +26,7 @@ interface ExportScreenProps {
   stripTint: string;
   caption: string;
   stickers: StickerItem[];
+  placedStickers?: PlacedSticker[];
   onNavigate: (screen: ScreenId) => void;
 }
 
@@ -38,6 +40,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
   stripTint,
   caption,
   stickers,
+  placedStickers = [],
   onNavigate,
 }) => {
   const [format, setFormat] = useState<ExportFormat>('png');
@@ -57,6 +60,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
       selectedFilter,
       caption,
       stickers,
+      placedStickers,
       format,
     })
       .then((url) => {
@@ -69,7 +73,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
     return () => {
       active = false;
     };
-  }, [mode, takeCount, frames, layout, selectedFilter, stripTint, caption, stickers, format]);
+  }, [mode, takeCount, frames, layout, selectedFilter, stripTint, caption, stickers, placedStickers, format]);
 
   const handleRealDownload = async () => {
     setStatus('rendering');
@@ -82,6 +86,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
         selectedFilter,
         caption,
         stickers,
+        placedStickers,
         format,
       });
       setPreviewDataUrl(url);
