@@ -111,10 +111,11 @@ export const App: React.FC = () => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const inviteCode = params.get('room');
+    const flow = params.get('flow');
     if (inviteCode && inviteCode.trim()) {
       setMode('duo');
       realtimeClient.joinRoom(inviteCode.trim().toUpperCase(), 'Guest');
-      setActiveScreen('camera');
+      setActiveScreen(flow === 'flipbook' ? 'flipbook' : 'camera');
     }
   }, []);
 
@@ -421,6 +422,8 @@ export const App: React.FC = () => {
           {activeScreen === 'flipbook' && (
             <FlipbookScreen
               mode={mode}
+              onChangeMode={setMode}
+              realtimeState={realtimeState}
               selectedFilter={selectedFilter}
               onChangeFilter={handleChangeFilter}
               onNavigate={setActiveScreen}

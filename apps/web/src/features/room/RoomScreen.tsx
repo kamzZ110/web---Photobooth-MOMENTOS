@@ -304,7 +304,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
                     color: '#18181B',
                   }}
                 >
-                  🎞️ Gerak · 30 Frame
+                  🎞️ Gerak · 60 Frame
                 </span>
                 <MiniCameraStripIcon accentColor="#B6834D" size={34} />
               </div>

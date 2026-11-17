@@ -18,32 +18,12 @@ const CENTER_INFO_PAGES: Array<{ id: ScreenId; label: string }> = [
   { id: 'privacy-info', label: 'Privasi' },
 ];
 
-const BOOTH_FLOW_TABS: Array<{ id: ScreenId; label: string }> = [
-  { id: 'room', label: '01. Mode' },
-  { id: 'frame-select', label: '02. Frame' },
-  { id: 'camera', label: '03. Kamera' },
-  { id: 'editor', label: '04. Hasil & Edit' },
-  { id: 'flipbook', label: 'Flipbook ✨' },
-];
-
-const STUDIO_SCREENS: ScreenId[] = [
-  'room',
-  'frame-select',
-  'camera',
-  'review',
-  'editor',
-  'export',
-  'flipbook',
-];
-
 export const GlassHeader: React.FC<GlassHeaderProps> = ({
   activeScreen,
   onSelectScreen,
   isNight,
   onToggleNight,
 }) => {
-  const isStudioFlow = STUDIO_SCREENS.includes(activeScreen);
-
   return (
     <header className="top-header-full">
       <div className="top-header-inner">
@@ -88,22 +68,6 @@ export const GlassHeader: React.FC<GlassHeaderProps> = ({
 
         {/* KANAN UJUNG: Switch Night Mode + Tombol Mulai Booth */}
         <div className="header-right">
-          {isStudioFlow && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {BOOTH_FLOW_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`nav-link-clean ${activeScreen === tab.id ? 'active' : ''}`}
-                  style={{ padding: '6px 11px', fontSize: '0.82rem' }}
-                  onClick={() => onSelectScreen(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <ThemeSwitch isNight={isNight} onToggleNight={onToggleNight} />
 
           <button

@@ -94,11 +94,16 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
 
   const stripRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<{
+    mode: 'move' | 'resize' | 'rotate';
     instanceId: string;
     startX: number;
     startY: number;
     origXPct: number;
     origYPct: number;
+    origScale: number;
+    origRotation: number;
+    cornerSignX?: 1 | -1;
+    cornerSignY?: 1 | -1;
   } | null>(null);
 
   const visibleFrames = frames.slice(0, takeCount);
@@ -137,18 +142,37 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
     (ps) => ps.instanceId === selectedStickerId
   );
 
-  // Drag handler over the photostrip canvas (Canva-style free positioning)
+  // Drag, Corner-Resize & Rotate handler over the photostrip canvas (Canva-style)
   useEffect(() => {
     const handlePointerMove = (ev: PointerEvent) => {
       const drag = dragStateRef.current;
       const box = stripRef.current;
       if (!drag || !box) return;
-      const rect = box.getBoundingClientRect();
-      const dxPct = ((ev.clientX - drag.startX) / rect.width) * 100;
-      const dyPct = ((ev.clientY - drag.startY) / rect.height) * 100;
-      const nextX = Math.max(6, Math.min(94, Math.round(drag.origXPct + dxPct)));
-      const nextY = Math.max(5, Math.min(95, Math.round(drag.origYPct + dyPct)));
-      onUpdatePlacedSticker(drag.instanceId, { xPct: nextX, yPct: nextY });
+
+      if (drag.mode === 'move') {
+        const rect = box.getBoundingClientRect();
+        const dxPct = ((ev.clientX - drag.startX) / rect.width) * 100;
+        const dyPct = ((ev.clientY - drag.startY) / rect.height) * 100;
+        const nextX = Math.max(6, Math.min(94, Math.round(drag.origXPct + dxPct)));
+        const nextY = Math.max(5, Math.min(95, Math.round(drag.origYPct + dyPct)));
+        onUpdatePlacedSticker(drag.instanceId, { xPct: nextX, yPct: nextY });
+      } else if (drag.mode === 'resize') {
+        const dx = (ev.clientX - drag.startX) * (drag.cornerSignX ?? 1);
+        const dy = (ev.clientY - drag.startY) * (drag.cornerSignY ?? 1);
+        const deltaScale = (dx + dy) / 90;
+        const nextScale = Math.max(
+          0.5,
+          Math.min(2.4, Number((drag.origScale + deltaScale).toFixed(2)))
+        );
+        onUpdatePlacedSticker(drag.instanceId, { scale: nextScale });
+      } else if (drag.mode === 'rotate') {
+        const dx = ev.clientX - drag.startX;
+        const nextRot = Math.max(
+          -180,
+          Math.min(180, Math.round(drag.origRotation + dx * 1.2))
+        );
+        onUpdatePlacedSticker(drag.instanceId, { rotation: nextRot });
+      }
     };
 
     const handlePointerUp = () => {
@@ -525,25 +549,63 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                         justifyContent: 'center',
                       }}
                     >
-                      {mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl ? (
+                      {mode === 'duo' ? (
                         <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-                          <img
-                            src={fr.imageDataUrl}
-                            alt={`Host ${idx + 1}`}
-                            draggable={false}
-                            style={{ width: '50%', height: '100%', objectFit: 'cover' }}
-                          />
-                          <img
-                            src={fr.guestImageDataUrl}
-                            alt={`Guest ${idx + 1}`}
-                            draggable={false}
+                          <div
                             style={{
                               width: '50%',
                               height: '100%',
-                              objectFit: 'cover',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                              background: fr.accentBg,
+                            }}
+                          >
+                            {fr.imageDataUrl ? (
+                              <img
+                                src={fr.imageDataUrl}
+                                alt={`Host ${idx + 1}`}
+                                draggable={false}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  display: 'block',
+                                }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: '1.8rem' }}>{fr.hostPose}</span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              width: '50%',
+                              height: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                              background: '#EBF4FD',
                               borderLeft: '2px solid rgba(255,255,255,0.85)',
                             }}
-                          />
+                          >
+                            {fr.guestImageDataUrl ? (
+                              <img
+                                src={fr.guestImageDataUrl}
+                                alt={`Guest ${idx + 1}`}
+                                draggable={false}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  display: 'block',
+                                }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: '1.8rem' }}>{fr.guestPose}</span>
+                            )}
+                          </div>
                         </div>
                       ) : fr.imageDataUrl ? (
                         <img
@@ -558,11 +620,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                           }}
                         />
                       ) : (
-                        <span style={{ fontSize: '2.1rem' }}>
-                          {mode === 'duo'
-                            ? `${fr.hostPose} ${fr.guestPose}`
-                            : fr.hostPose}
-                        </span>
+                        <span style={{ fontSize: '2.1rem' }}>{fr.hostPose}</span>
                       )}
                     </div>
                   </div>
@@ -612,6 +670,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
               {placedStickers.map((ps) => {
                 const isSelected = ps.instanceId === selectedStickerId;
                 const isTapeOrStamp = ps.category === 'tape' || ps.category === 'stamp';
+                const invScale = Number((1 / Math.max(0.5, ps.scale)).toFixed(3));
                 return (
                   <div
                     key={ps.instanceId}
@@ -626,11 +685,14 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       setSelectedStickerId(ps.instanceId);
                       setActiveTab('stickers');
                       dragStateRef.current = {
+                        mode: 'move',
                         instanceId: ps.instanceId,
                         startX: ev.clientX,
                         startY: ev.clientY,
                         origXPct: ps.xPct,
                         origYPct: ps.yPct,
+                        origScale: ps.scale,
+                        origRotation: ps.rotation,
                       };
                     }}
                     style={{
@@ -640,12 +702,12 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       transform: `translate(-50%, -50%) rotate(${ps.rotation}deg) scale(${ps.scale})`,
                       zIndex: isSelected ? 40 : 25,
                       cursor: isPaused ? 'not-allowed' : 'grab',
-                      padding: isSelected ? '3px 5px' : 2,
+                      padding: isSelected ? '6px 8px' : 2,
                       border: isSelected ? '1.5px dashed #BC4374' : '1.5px solid transparent',
                       borderRadius: 8,
-                      background: isSelected ? 'rgba(255,255,255,0.22)' : 'transparent',
+                      background: isSelected ? 'rgba(255,255,255,0.24)' : 'transparent',
                     }}
-                    title="Geser untuk memindahkan stiker"
+                    title="Geser untuk memindahkan, atau tarik sudut untuk mengubah ukuran"
                   >
                     {isTapeOrStamp ? (
                       <span
@@ -683,36 +745,172 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       </span>
                     )}
 
-                    {/* Canva-Style Corner Delete & Quick Edit Badge */}
+                    {/* Canva-Style Interactive Corner Handles (Delete, Rotate, & Drag Corner Resize) */}
                     {isSelected && !isPaused && (
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          onRemovePlacedSticker(ps.instanceId);
-                          setSelectedStickerId(null);
-                        }}
-                        style={{
-                          position: 'absolute',
-                          top: -10,
-                          right: -10,
-                          width: 20,
-                          height: 20,
-                          borderRadius: '50%',
-                          border: '1.5px solid #18181B',
-                          background: '#BC4374',
-                          color: '#FFFFFF',
-                          fontSize: '0.7rem',
-                          fontWeight: 800,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'pointer',
-                        }}
-                        aria-label="Hapus stiker"
-                      >
-                        ×
-                      </button>
+                      <>
+                        {/* Top-Right: Delete Button (×) */}
+                        <button
+                          type="button"
+                          onPointerDown={(ev) => ev.stopPropagation()}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            onRemovePlacedSticker(ps.instanceId);
+                            setSelectedStickerId(null);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: -11,
+                            right: -11,
+                            width: 21,
+                            height: 21,
+                            transform: `scale(${invScale})`,
+                            borderRadius: '50%',
+                            border: '1.5px solid #18181B',
+                            background: '#BC4374',
+                            color: '#FFFFFF',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                          }}
+                          aria-label="Hapus stiker"
+                          title="Hapus stiker (×)"
+                        >
+                          ×
+                        </button>
+
+                        {/* Top-Left: Quick Rotate / Drag Rotate Handle (↻) */}
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            onUpdatePlacedSticker(ps.instanceId, {
+                              rotation: ((ps.rotation + 15 + 180) % 360) - 180,
+                            });
+                          }}
+                          onPointerDown={(ev) => {
+                            ev.stopPropagation();
+                            dragStateRef.current = {
+                              mode: 'rotate',
+                              instanceId: ps.instanceId,
+                              startX: ev.clientX,
+                              startY: ev.clientY,
+                              origXPct: ps.xPct,
+                              origYPct: ps.yPct,
+                              origScale: ps.scale,
+                              origRotation: ps.rotation,
+                            };
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: -11,
+                            left: -11,
+                            width: 21,
+                            height: 21,
+                            transform: `scale(${invScale})`,
+                            borderRadius: '50%',
+                            border: '1.5px solid #18181B',
+                            background: '#FFFFFF',
+                            color: '#18181B',
+                            fontSize: '0.68rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'ew-resize',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.18)',
+                          }}
+                          aria-label="Putar stiker"
+                          title="Klik atau geser untuk memutar stiker"
+                        >
+                          ↻
+                        </button>
+
+                        {/* Bottom-Right: Primary Drag Corner Resize Handle (↘) */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Tarik sudut kanan bawah untuk mengubah ukuran stiker"
+                          title="Tarik sudut untuk memperbesar / memperkecil (Resize)"
+                          onClick={(ev) => ev.stopPropagation()}
+                          onPointerDown={(ev) => {
+                            ev.stopPropagation();
+                            dragStateRef.current = {
+                              mode: 'resize',
+                              instanceId: ps.instanceId,
+                              startX: ev.clientX,
+                              startY: ev.clientY,
+                              origXPct: ps.xPct,
+                              origYPct: ps.yPct,
+                              origScale: ps.scale,
+                              origRotation: ps.rotation,
+                              cornerSignX: 1,
+                              cornerSignY: 1,
+                            };
+                          }}
+                          style={{
+                            position: 'absolute',
+                            bottom: -10,
+                            right: -10,
+                            width: 19,
+                            height: 19,
+                            transform: `scale(${invScale})`,
+                            borderRadius: 5,
+                            border: '2px solid #18181B',
+                            background: '#FFFFFF',
+                            color: '#BC4374',
+                            fontSize: '0.66rem',
+                            fontWeight: 900,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'nwse-resize',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.22)',
+                          }}
+                        >
+                          ↘
+                        </div>
+
+                        {/* Bottom-Left: Secondary Drag Corner Resize Handle (↙) */}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Tarik sudut kiri bawah untuk mengubah ukuran stiker"
+                          title="Tarik sudut untuk memperbesar / memperkecil (Resize)"
+                          onClick={(ev) => ev.stopPropagation()}
+                          onPointerDown={(ev) => {
+                            ev.stopPropagation();
+                            dragStateRef.current = {
+                              mode: 'resize',
+                              instanceId: ps.instanceId,
+                              startX: ev.clientX,
+                              startY: ev.clientY,
+                              origXPct: ps.xPct,
+                              origYPct: ps.yPct,
+                              origScale: ps.scale,
+                              origRotation: ps.rotation,
+                              cornerSignX: -1,
+                              cornerSignY: 1,
+                            };
+                          }}
+                          style={{
+                            position: 'absolute',
+                            bottom: -10,
+                            left: -10,
+                            width: 15,
+                            height: 15,
+                            transform: `scale(${invScale})`,
+                            borderRadius: 4,
+                            border: '2px solid #BC4374',
+                            background: '#FFFFFF',
+                            cursor: 'nesw-resize',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }}
+                        />
+                      </>
                     )}
                   </div>
                 );

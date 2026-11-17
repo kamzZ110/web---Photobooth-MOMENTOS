@@ -91,7 +91,7 @@ export function captureVideoFrameToDataUrl(
 
 export function createSimulatedPoseDataUrl(
   poseText: string,
-  label: string,
+  _label: string,
   bgHex: string,
   cssFilter = 'none',
   width = 960,
@@ -108,7 +108,7 @@ export function createSimulatedPoseDataUrl(
   ctx.fillStyle = bgHex;
   ctx.fillRect(0, 0, width, height);
 
-  // Subtle decorative glow
+  // Subtle decorative glow (no text labels inside photo box!)
   const grad = ctx.createRadialGradient(
     width * 0.5,
     height * 0.45,
@@ -126,11 +126,7 @@ export function createSimulatedPoseDataUrl(
   ctx.font = `700 ${Math.round(height * 0.28)}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(poseText, width / 2, height / 2 - 14);
-
-  ctx.font = `700 ${Math.round(height * 0.045)}px "Plus Jakarta Sans", sans-serif`;
-  ctx.fillStyle = '#52525B';
-  ctx.fillText(label, width / 2, height - 48);
+  ctx.fillText(poseText, width / 2, height / 2);
   ctx.restore();
 
   return canvas.toDataURL('image/png');
@@ -205,11 +201,9 @@ export async function renderClassicCompositeDataUrl(params: {
   const sidePad = isFilm ? 74 : isGridOrScrapbook ? 56 : isPolaroid ? 48 : 38;
   const gap = isGridOrScrapbook ? 30 : isPolaroid ? 28 : 20;
   const slotW = (canvasWidth - sidePad * 2 - gap * (cols - 1)) / cols;
-  const slotH = isGridOrScrapbook
-    ? Math.round(slotW * 0.78)
-    : isPolaroid
-    ? Math.round(slotW * 0.76)
-    : Math.round(slotW * 0.66);
+  const slotH = isGridOrScrapbook || isPolaroid
+    ? Math.round((slotW * 3) / 4)
+    : Math.round((slotW * 2) / 3);
 
   const startY = isScrapbook ? 148 : 96;
   const footerSpace = isTicket ? 150 : isPolaroid ? 160 : 124;
@@ -332,17 +326,26 @@ export async function renderClassicCompositeDataUrl(params: {
     const sourceUrl =
       fr.imageDataUrl ??
       createSimulatedPoseDataUrl(
-        mode === 'duo' ? `${fr.hostPose}  ${fr.guestPose}` : fr.hostPose,
+        fr.hostPose,
         fr.label,
         fr.accentBg,
         cssFilter
       );
 
+    const guestSourceUrl =
+      fr.guestImageDataUrl ??
+      createSimulatedPoseDataUrl(
+        fr.guestPose,
+        fr.label,
+        '#EBF4FD',
+        cssFilter
+      );
+
     try {
-      if (mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl) {
+      if (mode === 'duo') {
         const [hostImg, guestImg] = await Promise.all([
-          loadImage(fr.imageDataUrl),
-          loadImage(fr.guestImageDataUrl),
+          loadImage(sourceUrl),
+          loadImage(guestSourceUrl),
         ]);
         const halfW = slotW / 2;
 
@@ -351,7 +354,9 @@ export async function renderClassicCompositeDataUrl(params: {
         ctx.beginPath();
         ctx.rect(x, y, halfW, slotH);
         ctx.clip();
-        ctx.filter = cssFilter;
+        if (fr.imageDataUrl) {
+          ctx.filter = cssFilter;
+        }
         const hRatio = hostImg.width / hostImg.height;
         const halfBoxRatio = halfW / slotH;
         let hdw = halfW;
@@ -373,7 +378,9 @@ export async function renderClassicCompositeDataUrl(params: {
         ctx.beginPath();
         ctx.rect(x + halfW, y, halfW, slotH);
         ctx.clip();
-        ctx.filter = cssFilter;
+        if (fr.guestImageDataUrl) {
+          ctx.filter = cssFilter;
+        }
         const gRatio = guestImg.width / guestImg.height;
         let gdw = halfW;
         let gdh = slotH;
@@ -389,7 +396,7 @@ export async function renderClassicCompositeDataUrl(params: {
         ctx.drawImage(guestImg, gdx, gdy, gdw, gdh);
         ctx.restore();
 
-        // Clean thin divider like Gambar 5
+        // Clean thin divider
         ctx.save();
         ctx.strokeStyle = 'rgba(255,255,255,0.85)';
         ctx.lineWidth = 2;
@@ -531,6 +538,8 @@ export async function renderClassicCompositeDataUrl(params: {
 
 export function captureFlipbookFrameDataUrl(options: {
   videoEl: HTMLVideoElement | null;
+  guestVideoEl?: HTMLVideoElement | null;
+  mode?: BoothMode;
   fallbackEmoji: string;
   frameIndex: number;
   totalFrames: number;
@@ -539,9 +548,13 @@ export function captureFlipbookFrameDataUrl(options: {
   mirror?: boolean;
   paperColor?: string;
   accentHex?: string;
+  width?: number;
+  height?: number;
 }): string {
   const {
     videoEl,
+    guestVideoEl = null,
+    mode = 'solo',
     fallbackEmoji,
     frameIndex,
     totalFrames,
@@ -550,23 +563,32 @@ export function captureFlipbookFrameDataUrl(options: {
     mirror = true,
     paperColor = '#FBF7EF',
     accentHex = '#BC4374',
+    width = 420,
+    height = 315,
   } = options;
 
-  const width = 480;
-  const height = 360;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
-  // Base webcam frame or simulated pose
-  if (videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+  const drawVideoBox = (
+    vid: HTMLVideoElement,
+    bx: number,
+    by: number,
+    bw: number,
+    bh: number,
+    isMirror: boolean
+  ) => {
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(bx, by, bw, bh);
+    ctx.clip();
     ctx.filter = cssFilter;
-    const vw = videoEl.videoWidth;
-    const vh = videoEl.videoHeight;
-    const targetRatio = width / height;
+    const vw = vid.videoWidth;
+    const vh = vid.videoHeight;
+    const targetRatio = bw / bh;
     const sourceRatio = vw / vh;
     let sx = 0;
     let sy = 0;
@@ -579,19 +601,60 @@ export function captureFlipbookFrameDataUrl(options: {
       sH = vw / targetRatio;
       sy = (vh - sH) / 2;
     }
-    if (mirror) {
-      ctx.translate(width, 0);
+    if (isMirror) {
+      ctx.translate(bx + bw, by);
       ctx.scale(-1, 1);
+      ctx.drawImage(vid, sx, sy, sW, sH, 0, 0, bw, bh);
+    } else {
+      ctx.drawImage(vid, sx, sy, sW, sH, bx, by, bw, bh);
     }
-    ctx.drawImage(videoEl, sx, sy, sW, sH, 0, 0, width, height);
     ctx.restore();
+  };
+
+  const hasLocalVideo = Boolean(
+    videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0
+  );
+  const hasGuestVideo = Boolean(
+    guestVideoEl && guestVideoEl.readyState >= 2 && guestVideoEl.videoWidth > 0
+  );
+
+  // Base webcam frame or simulated pose (420 x 315, 4:3)
+  if (mode === 'duo' && hasLocalVideo && videoEl) {
+    const halfW = width / 2;
+    drawVideoBox(videoEl, 0, 0, halfW, height, mirror);
+    if (hasGuestVideo && guestVideoEl) {
+      drawVideoBox(guestVideoEl, halfW, 0, halfW, height, false);
+    } else {
+      ctx.save();
+      ctx.filter = cssFilter;
+      ctx.fillStyle = '#EBF4FD';
+      ctx.fillRect(halfW, 0, halfW, height);
+      ctx.fillStyle = '#18181B';
+      ctx.font = '700 48px "Segoe UI Emoji", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const bob = frameIndex % 2 === 0 ? -4 : 4;
+      const parts = fallbackEmoji.split('·');
+      ctx.fillText((parts[1] ?? '😄✨').trim(), halfW + halfW / 2, height / 2 + bob);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(halfW, 0);
+    ctx.lineTo(halfW, height);
+    ctx.stroke();
+    ctx.restore();
+  } else if (hasLocalVideo && videoEl) {
+    drawVideoBox(videoEl, 0, 0, width, height, mirror);
   } else {
     ctx.save();
     ctx.filter = cssFilter;
     ctx.fillStyle = paperColor;
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = '#18181B';
-    ctx.font = '700 86px "Segoe UI Emoji", sans-serif';
+    ctx.font = '700 72px "Segoe UI Emoji", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const bob = frameIndex % 2 === 0 ? -4 : 4;
@@ -603,41 +666,46 @@ export function captureFlipbookFrameDataUrl(options: {
   ctx.save();
   if (overlayId === 'confetti-burst') {
     const items = ['🎊', '✨', '🎉', '🌸', '⭐'];
-    ctx.font = '24px sans-serif';
+    ctx.font = '22px sans-serif';
     items.forEach((ic, idx) => {
-      const px = 48 + idx * 96;
-      const py = 36 + ((frameIndex * 14 + idx * 45) % (height - 72));
+      const px = 38 + idx * 84;
+      const py = 32 + ((frameIndex * 13 + idx * 42) % (height - 64));
       ctx.fillText(ic, px, py);
     });
   } else if (overlayId === 'floating-hearts') {
-    ctx.font = '26px sans-serif';
-    const lift = (frameIndex * 9) % (height - 60);
-    ctx.fillText('💖', 32, height - 30 - lift);
-    ctx.fillText('🫶', width - 64, height - 48 - ((lift + 80) % (height - 60)));
+    ctx.font = '24px sans-serif';
+    const lift = (frameIndex * 8) % (height - 56);
+    ctx.fillText('💖', 28, height - 28 - lift);
+    ctx.fillText('🫶', width - 58, height - 42 - ((lift + 75) % (height - 56)));
   } else if (overlayId === 'disco-sparkles') {
     ctx.fillStyle =
       frameIndex % 2 === 0 ? 'rgba(240, 123, 174, 0.18)' : 'rgba(96, 165, 250, 0.18)';
     ctx.fillRect(0, 0, width, height);
-    ctx.font = '22px sans-serif';
-    ctx.fillText('✨', 40 + ((frameIndex * 23) % 360), 46);
+    ctx.font = '20px sans-serif';
+    ctx.fillText('✨', 36 + ((frameIndex * 21) % (width - 90)), 42);
   } else if (overlayId === 'comic-pop') {
     ctx.fillStyle = '#FBBF24';
     ctx.strokeStyle = '#18181B';
     ctx.lineWidth = 2;
-    drawRoundedRectPath(ctx, width - 108, 16, 88, 32, 8);
+    drawRoundedRectPath(ctx, width - 102, 14, 84, 30, 8);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#18181B';
-    ctx.font = '800 15px "Plus Jakarta Sans", sans-serif';
+    ctx.font = '800 14px "Plus Jakarta Sans", sans-serif';
     ctx.textAlign = 'center';
+    const beatThird = Math.max(1, Math.floor(totalFrames / 3));
     ctx.fillText(
-      frameIndex < 10 ? 'SNAP!' : frameIndex < 20 ? 'POW!' : 'YAY!',
-      width - 64,
-      37
+      frameIndex < beatThird
+        ? 'SNAP!'
+        : frameIndex < beatThird * 2
+        ? 'POW!'
+        : 'YAY!',
+      width - 60,
+      34
     );
     ctx.textAlign = 'left';
   } else if (overlayId === 'film-grain') {
-    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillStyle = 'rgba(0,0,0,0.055)';
     for (let y = frameIndex % 4; y < height; y += 6) {
       ctx.fillRect(0, y, width, 1);
     }
@@ -646,34 +714,336 @@ export function captureFlipbookFrameDataUrl(options: {
 
   // Registration stamp bottom right
   ctx.fillStyle = accentHex;
-  drawRoundedRectPath(ctx, width - 134, height - 36, 118, 24, 12);
+  drawRoundedRectPath(ctx, width - 126, height - 34, 112, 22, 11);
   ctx.fill();
   ctx.fillStyle = '#FFFFFF';
   ctx.font = '700 11px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(
     `FRM ${String(frameIndex + 1).padStart(2, '0')}/${totalFrames}`,
-    width - 75,
-    height - 20
+    width - 70,
+    height - 19
   );
 
   return canvas.toDataURL('image/png');
 }
 
+function drawSpiralSpine(
+  ctx: CanvasRenderingContext2D,
+  height: number,
+  binderColor: string
+) {
+  const spineW = 34;
+  ctx.save();
+  ctx.fillStyle = binderColor;
+  ctx.fillRect(0, 0, spineW, height);
+  ctx.strokeStyle = '#18181B';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(spineW, 0);
+  ctx.lineTo(spineW, height);
+  ctx.stroke();
+
+  const ringCount = 7;
+  const step = height / (ringCount + 1);
+  for (let i = 1; i <= ringCount; i++) {
+    const ry = Math.round(i * step);
+    // Hole
+    ctx.fillStyle = '#18181B';
+    ctx.beginPath();
+    ctx.arc(spineW - 7, ry, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Metallic spiral ring
+    const grad = ctx.createLinearGradient(4, ry - 4, spineW + 4, ry + 4);
+    grad.addColorStop(0, '#F5F5F4');
+    grad.addColorStop(0.5, '#A8A29E');
+    grad.addColorStop(1, '#44403C');
+    ctx.fillStyle = grad;
+    drawRoundedRectPath(ctx, 4, ry - 4, 24, 8, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#18181B';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Render Sampul Depan Buku Flipbook (Tanpa Gambar Foto) + Transisi Membuka Buku.
+ */
+export async function renderFlipbookCoverDataUrl(options: {
+  width?: number;
+  height?: number;
+  title: string;
+  subtitle?: string;
+  binderColor: string;
+  paperColor: string;
+  accentHex: string;
+  openProgress?: number; // 0 = closed cover, 0..1 = opening cover animation
+  firstPageDataUrl?: string;
+}): Promise<string> {
+  const {
+    width = 420,
+    height = 315,
+    title,
+    subtitle = 'Interactive Motion Flipbook',
+    binderColor,
+    paperColor,
+    accentHex,
+    openProgress = 0,
+    firstPageDataUrl,
+  } = options;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  const spineW = 34;
+  const bodyW = width - spineW;
+
+  // If cover is opening (openProgress > 0), draw page 1 underneath first
+  if (openProgress > 0) {
+    ctx.fillStyle = paperColor;
+    ctx.fillRect(0, 0, width, height);
+    if (firstPageDataUrl) {
+      try {
+        const firstImg = await loadImage(firstPageDataUrl);
+        ctx.drawImage(firstImg, spineW, 0, bodyW, height);
+      } catch {
+        // fallback to paperColor
+      }
+    }
+  }
+
+  // Draw Cover Panel (scaled horizontally around spineW to animate opening)
+  const coverScaleX = Math.max(0.08, 1 - openProgress);
+  ctx.save();
+  ctx.translate(spineW, 0);
+  ctx.scale(coverScaleX, 1);
+
+  // Cover base surface (no photo!)
+  ctx.fillStyle = binderColor;
+  ctx.fillRect(0, 0, bodyW, height);
+
+  // Inner editorial book-cover plate
+  const pad = 22;
+  ctx.fillStyle = paperColor;
+  drawRoundedRectPath(ctx, pad, pad, bodyW - pad * 2, height - pad * 2, 14);
+  ctx.fill();
+  ctx.strokeStyle = accentHex;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Second inner ornamental border
+  ctx.strokeStyle = binderColor;
+  ctx.lineWidth = 1.5;
+  drawRoundedRectPath(
+    ctx,
+    pad + 8,
+    pad + 8,
+    bodyW - (pad + 8) * 2,
+    height - (pad + 8) * 2,
+    10
+  );
+  ctx.stroke();
+
+  const isDarkPaper = paperColor === '#201E28' || paperColor === '#18181B';
+  const textPrimary = isDarkPaper ? '#FAF7F2' : '#18181B';
+  const textMuted = isDarkPaper ? '#D4D4D8' : '#52525B';
+  const centerX = bodyW / 2;
+
+  // Top Pill Badge
+  ctx.fillStyle = accentHex;
+  drawRoundedRectPath(ctx, centerX - 92, pad + 26, 184, 24, 12);
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '800 10px "Plus Jakarta Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('MOMENTOS STUDIO EDITION', centerX, pad + 38);
+
+  // Decorative Book Emblem (Strictly NO photo on cover!)
+  ctx.fillStyle = accentHex;
+  ctx.font = '700 13px monospace';
+  ctx.fillText('✦  60 FRAMES · MOTION BOOK  ✦', centerX, height / 2 - 42);
+
+  // Theme Title
+  ctx.fillStyle = textPrimary;
+  ctx.font = '800 25px "Outfit", "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(title.toUpperCase(), centerX, height / 2 - 6);
+
+  // Subtitle
+  ctx.fillStyle = textMuted;
+  ctx.font = '600 12px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(subtitle, centerX, height / 2 + 22);
+
+  // Divider line
+  ctx.strokeStyle = accentHex;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 54, height / 2 + 42);
+  ctx.lineTo(centerX + 54, height / 2 + 42);
+  ctx.stroke();
+
+  // Footer Brand Stamp
+  ctx.fillStyle = textPrimary;
+  ctx.font = '800 12px monospace';
+  ctx.fillText('MOMENTOS FLIPBOOK • 2026', centerX, height - pad - 26);
+
+  ctx.restore();
+
+  // Page-turn drop shadow when cover is swinging open
+  if (openProgress > 0) {
+    const edgeX = spineW + bodyW * coverScaleX;
+    const shadowGrad = ctx.createLinearGradient(edgeX, 0, edgeX + 28, 0);
+    shadowGrad.addColorStop(0, 'rgba(24, 24, 27, 0.42)');
+    shadowGrad.addColorStop(1, 'rgba(24, 24, 27, 0)');
+    ctx.fillStyle = shadowGrad;
+    ctx.fillRect(edgeX, 0, 28, height);
+  }
+
+  // Outer book border & Left Spiral Spine
+  drawSpiralSpine(ctx, height, binderColor);
+  ctx.strokeStyle = '#18181B';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, width - 3, height - 3);
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Susun sequence GIF lengkap:
+ * 1. Cover Pembuka tanpa foto (~0.4 detik / 400ms)
+ * 2. Animasi cepat membuka sampul buku (3 frame transisi)
+ * 3. Membalik halaman Frame 1 s/d Frame 60 dengan jilid spiral di kiri (~12 FPS / 85ms)
+ */
+export async function buildFlipbookGifSequenceWithCover(params: {
+  frames: string[];
+  presetName: string;
+  presetSubtitle?: string;
+  binderColor: string;
+  paperColor: string;
+  accentHex: string;
+  pageDelayMs?: number;
+}): Promise<{ allFrames: string[]; frameDelaysMs: number[] }> {
+  const {
+    frames,
+    presetName,
+    presetSubtitle,
+    binderColor,
+    paperColor,
+    accentHex,
+    pageDelayMs = 85,
+  } = params;
+
+  const width = 420;
+  const height = 315;
+  const spineW = 34;
+  const bodyW = width - spineW;
+
+  const allFrames: string[] = [];
+  const frameDelaysMs: number[] = [];
+
+  const firstPage = frames[0];
+
+  // 1. Closed Front Cover (Held for ~0.4s = 400ms, twice so reader clearly sees cover)
+  const closedCoverUrl = await renderFlipbookCoverDataUrl({
+    width,
+    height,
+    title: presetName,
+    subtitle: presetSubtitle,
+    binderColor,
+    paperColor,
+    accentHex,
+    openProgress: 0,
+  });
+  allFrames.push(closedCoverUrl);
+  frameDelaysMs.push(400);
+
+  // 2. Fast Book Cover Opening Animation (3 quick swing frames)
+  for (const prog of [0.32, 0.64, 0.88]) {
+    const openingUrl = await renderFlipbookCoverDataUrl({
+      width,
+      height,
+      title: presetName,
+      subtitle: presetSubtitle,
+      binderColor,
+      paperColor,
+      accentHex,
+      openProgress: prog,
+      firstPageDataUrl: firstPage,
+    });
+    allFrames.push(openingUrl);
+    frameDelaysMs.push(65);
+  }
+
+  // 3. Render each of the 60 pages inside the spiral-bound book frame at ~12 FPS (85ms)
+  const pageCanvas = document.createElement('canvas');
+  pageCanvas.width = width;
+  pageCanvas.height = height;
+  const pCtx = pageCanvas.getContext('2d');
+
+  for (let i = 0; i < frames.length; i++) {
+    if (!pCtx) {
+      allFrames.push(frames[i]);
+      frameDelaysMs.push(pageDelayMs);
+      continue;
+    }
+    pCtx.clearRect(0, 0, width, height);
+    pCtx.fillStyle = paperColor;
+    pCtx.fillRect(0, 0, width, height);
+
+    try {
+      const img = await loadImage(frames[i]);
+      pCtx.drawImage(img, spineW, 0, bodyW, height);
+    } catch {
+      // keep paperColor fallback
+    }
+
+    // Subtle page-flip crease shadow near spiral spine
+    const creaseGrad = pCtx.createLinearGradient(spineW, 0, spineW + 14, 0);
+    creaseGrad.addColorStop(0, 'rgba(24,24,27,0.22)');
+    creaseGrad.addColorStop(1, 'rgba(24,24,27,0)');
+    pCtx.fillStyle = creaseGrad;
+    pCtx.fillRect(spineW, 0, 14, height);
+
+    drawSpiralSpine(pCtx, height, binderColor);
+    pCtx.strokeStyle = '#18181B';
+    pCtx.lineWidth = 3;
+    pCtx.strokeRect(1.5, 1.5, width - 3, height - 3);
+
+    allFrames.push(pageCanvas.toDataURL('image/png'));
+    frameDelaysMs.push(pageDelayMs);
+
+    if (i % 6 === 0) {
+      await new Promise<void>((r) => window.setTimeout(r, 0));
+    }
+  }
+
+  return { allFrames, frameDelaysMs };
+}
+
 /**
  * Pure TypeScript GIF89a animated encoder using uniform 3-3-2 palette & variable LZW.
+ * Supports per-frame delays and async step-by-step yielding with % progress callback.
  */
 export async function encodeAnimatedGifBlob(
   frameDataUrls: string[],
-  delayMs = 100
+  delayMs = 85,
+  options?: {
+    frameDelaysMs?: number[];
+    onProgress?: (percent: number) => void;
+  }
 ): Promise<Blob> {
   if (frameDataUrls.length === 0) {
     throw new Error('Belum ada frame flipbook untuk dienkode ke GIF.');
   }
 
   const firstImg = await loadImage(frameDataUrls[0]);
-  const width = firstImg.width || 480;
-  const height = firstImg.height || 360;
+  const width = firstImg.width || 420;
+  const height = firstImg.height || 315;
 
   const workCanvas = document.createElement('canvas');
   workCanvas.width = width;
@@ -710,9 +1080,13 @@ export async function encodeAnimatedGifBlob(
   pushStr('NETSCAPE2.0');
   out.push(0x03, 0x01, 0x00, 0x00, 0x00);
 
-  const delayCs = Math.max(2, Math.round(delayMs / 10));
+  options?.onProgress?.(2);
 
-  for (const url of frameDataUrls) {
+  for (let frameIdx = 0; frameIdx < frameDataUrls.length; frameIdx++) {
+    const url = frameDataUrls[frameIdx];
+    const thisDelayMs = options?.frameDelaysMs?.[frameIdx] ?? delayMs;
+    const delayCs = Math.max(2, Math.round(thisDelayMs / 10));
+
     const img = await loadImage(url);
     workCtx.clearRect(0, 0, width, height);
     workCtx.drawImage(img, 0, 0, width, height);
@@ -805,9 +1179,19 @@ export async function encodeAnimatedGifBlob(
     }
     flushSubBlock();
     out.push(0x00); // Image Data Terminator
+
+    const pct = Math.min(
+      99,
+      Math.max(3, Math.round(((frameIdx + 1) / frameDataUrls.length) * 100))
+    );
+    options?.onProgress?.(pct);
+
+    // Yield every frame so the browser UI stays responsive and renders % progress
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   }
 
   out.push(0x3b); // GIF Trailer
+  options?.onProgress?.(100);
   return new Blob([new Uint8Array(out)], { type: 'image/gif' });
 }
 

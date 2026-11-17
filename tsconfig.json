@@ -1,0 +1,12 @@
+{
+  "extends": "./apps/web/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@momentos/shared": ["./packages/shared/src/index.ts"],
+      "@assets/*": ["./assets/*"],
+      "@fonts/*": ["./font/*"]
+    }
+  },
+  "include": ["apps/web/src", "packages/shared/src"]
+}

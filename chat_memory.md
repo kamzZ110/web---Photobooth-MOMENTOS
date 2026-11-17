@@ -71,9 +71,9 @@ Dokumen ini berisi rangkuman lengkap konteks, keputusan desain, fitur yang sudah
 
 ---
 
-## 4. Rencana Pembenahan & Fitur Lanjutan (Belum Dieksekusi)
+## 4. Pembenahan Navbar, Stiker Interaktif & Alur 6 Langkah Flipbook (Sudah Selesai)
 
-Berdasarkan diskusi terakhir, berikut poin-poin yang siap dikerjakan pada sesi berikutnya **tanpa mengubah template desain utama**:
+Seluruh poin berikut telah diimplementasikan dan lulus verifikasi `npm run typecheck` (`0 error`) **tanpa mengubah template desain utama**:
 
 1. **Hapus Pill Duplikat di Navbar Atas ([GlassHeader.tsx](apps/web/src/components/GlassHeader.tsx)):**
    - Menghapus `BOOTH_FLOW_TABS` (`01. Mode`, `02. Frame`, `03. Kamera`, `04. Hasil & Edit`, `Flipbook ✨`) dari pojok kanan atas header agar navbar tetap sebaris dan tidak bertumpuk dengan stepper halaman.
