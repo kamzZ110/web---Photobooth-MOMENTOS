@@ -248,7 +248,7 @@ class MomentosRealtimeClient {
   public createRoom(params?: {
     displayName?: string;
     mode?: BoothMode;
-    takeCount?: 3 | 4;
+    takeCount?: number;
     selectedFilter?: PhotoFilterId;
   }): void {
     const sent = this.sendWs({
@@ -291,7 +291,7 @@ class MomentosRealtimeClient {
         ],
         countdown: null,
         retakePrompt: null,
-        syncedFrames: [0, 1, 2, 3].map((frameIndex) => ({
+        syncedFrames: [0, 1, 2, 3, 4, 5, 6, 7].map((frameIndex) => ({
           frameIndex,
           updatedAt: now,
         })),
@@ -387,7 +387,7 @@ class MomentosRealtimeClient {
   }
 
   public syncConfig(patch: {
-    takeCount?: 3 | 4;
+    takeCount?: number;
     selectedFilter?: PhotoFilterId;
     layout?: TemplateLayoutId;
     phase?: RoomSessionPhase;

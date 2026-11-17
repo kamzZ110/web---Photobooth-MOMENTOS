@@ -36,7 +36,7 @@ interface InternalRoom {
   createdAt: number;
   expiresAt: number;
   idleDestroyAt: number | null;
-  takeCount: 3 | 4;
+  takeCount: number;
   selectedFilter: PhotoFilterId;
   layout: TemplateLayoutId;
   retakesRemaining: number;
@@ -146,7 +146,7 @@ export class RoomStore {
   createRoom(params: {
     displayName?: string;
     mode?: BoothMode;
-    takeCount?: 3 | 4;
+    takeCount?: number;
     selectedFilter?: PhotoFilterId;
   }): {
     code: string;
@@ -181,14 +181,14 @@ export class RoomStore {
       createdAt: now,
       expiresAt: now + HARD_SESSION_TTL_MS,
       idleDestroyAt: null,
-      takeCount: params.takeCount ?? 3,
+      takeCount: Math.max(1, Math.min(8, Math.round(params.takeCount ?? 3))),
       selectedFilter: params.selectedFilter ?? 'normal',
       layout: 'strip-1x4',
       retakesRemaining: 3,
       participants: [host],
       countdown: null,
       retakePrompt: null,
-      syncedFrames: [0, 1, 2, 3].map((frameIndex) => ({
+      syncedFrames: [0, 1, 2, 3, 4, 5, 6, 7].map((frameIndex) => ({
         frameIndex,
         updatedAt: now,
       })),
@@ -383,7 +383,7 @@ export class RoomStore {
     code: string,
     role: ParticipantRole,
     patch: {
-      takeCount?: 3 | 4;
+      takeCount?: number;
       selectedFilter?: PhotoFilterId;
       layout?: TemplateLayoutId;
       phase?: RoomSessionPhase;
@@ -403,7 +403,9 @@ export class RoomStore {
       };
     }
 
-    if (patch.takeCount) room.takeCount = patch.takeCount;
+    if (patch.takeCount !== undefined) {
+      room.takeCount = Math.max(1, Math.min(8, Math.round(patch.takeCount)));
+    }
     if (patch.selectedFilter) room.selectedFilter = patch.selectedFilter;
     if (patch.layout) {
       const prev = room.layout;
@@ -488,7 +490,7 @@ export class RoomStore {
     dataUrl: string
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
-    if (!room || frameIndex < 0 || frameIndex > 3) return null;
+    if (!room || frameIndex < 0 || frameIndex > 7) return null;
 
     let entry = room.syncedFrames.find((f) => f.frameIndex === frameIndex);
     if (!entry) {

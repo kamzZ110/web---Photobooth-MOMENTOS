@@ -22,7 +22,7 @@ import {
 
 interface EditorScreenProps {
   mode: BoothMode;
-  takeCount: 3 | 4;
+  takeCount: number;
   frames: CapturedFrame[];
   retakesRemaining?: number;
   onRetakeFrame?: (frameId: number) => void;

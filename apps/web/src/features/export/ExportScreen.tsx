@@ -19,7 +19,7 @@ import {
 interface ExportScreenProps {
   mode: BoothMode;
   isNight?: boolean;
-  takeCount: 3 | 4;
+  takeCount: number;
   frames: CapturedFrame[];
   layout: TemplateLayoutId;
   selectedFilter: PhotoFilterId;

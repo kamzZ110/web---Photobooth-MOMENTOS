@@ -489,7 +489,7 @@ export interface AuthoritativeRoomSnapshot {
   createdAt: number;
   expiresAt: number;
   idleDestroyAt: number | null;
-  takeCount: 3 | 4;
+  takeCount: number;
   selectedFilter: PhotoFilterId;
   layout: TemplateLayoutId;
   retakesRemaining: number;
@@ -511,7 +511,7 @@ export type ClientToServerMessage =
       type: 'room:create';
       displayName?: string;
       mode?: BoothMode;
-      takeCount?: 3 | 4;
+      takeCount?: number;
       selectedFilter?: PhotoFilterId;
     }
   | {
@@ -533,7 +533,7 @@ export type ClientToServerMessage =
     }
   | {
       type: 'session:config';
-      takeCount?: 3 | 4;
+      takeCount?: number;
       selectedFilter?: PhotoFilterId;
       layout?: TemplateLayoutId;
       phase?: RoomSessionPhase;

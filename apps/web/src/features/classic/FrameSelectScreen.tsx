@@ -11,8 +11,8 @@ interface FrameSelectScreenProps {
   mode: BoothMode;
   layout: TemplateLayoutId;
   onChangeLayout: (layout: TemplateLayoutId) => void;
-  takeCount: 3 | 4;
-  onChangeTakeCount: (count: 3 | 4) => void;
+  takeCount: number;
+  onChangeTakeCount: (count: number) => void;
   roomCode?: string | null;
   onNavigate: (screen: ScreenId) => void;
 }
@@ -26,7 +26,7 @@ const INSTANT_IDS: TemplateLayoutId[] = [
   'editorial-scrapbook',
 ];
 
-const MINI_POSES = ['😊', '✌️', '🤩', '🫶'];
+const MINI_POSES = ['😊', '✌️', '🤩', '🫶', '😎', '🥳', '😉', '🌸'];
 
 export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
   mode,
@@ -41,6 +41,12 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
     ? 'instant'
     : 'strips';
   const [category, setCategory] = useState<FrameCategory>(initialCategory);
+  const [customPoseInput, setCustomPoseInput] = useState<string>(
+    takeCount > 4 || takeCount === 1 ? String(takeCount) : '6'
+  );
+  const [isCustomPoseActive, setIsCustomPoseActive] = useState<boolean>(
+    takeCount > 4 || takeCount === 1
+  );
 
   const stripPresets = CLASSIC_TEMPLATE_PRESETS.filter((p) =>
     STRIP_IDS.includes(p.id)
@@ -179,8 +185,8 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
         <div
           style={{
             width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'grid',
+            gridTemplateColumns: takeCount > 4 ? '1fr 1fr' : '1fr',
             gap: 6,
           }}
         >
@@ -188,7 +194,7 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
             <div
               key={idx}
               style={{
-                height: takeCount === 4 ? 40 : 52,
+                height: takeCount > 4 ? 36 : takeCount === 4 ? 40 : 52,
                 borderRadius: 8,
                 background: isFilm
                   ? '#2C282F'
@@ -201,10 +207,10 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1.15rem',
+                fontSize: takeCount > 4 ? '0.95rem' : '1.15rem',
               }}
             >
-              {MINI_POSES[idx]}
+              {MINI_POSES[idx % MINI_POSES.length]}
             </div>
           ))}
         </div>
@@ -331,25 +337,95 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
             style={{
               padding: 5,
               display: 'inline-flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
               gap: 6,
             }}
           >
+            {([2, 3, 4] as const).map((cnt) => (
+              <button
+                key={cnt}
+                type="button"
+                className={`btn ${!isCustomPoseActive && takeCount === cnt ? 'active-pill' : ''}`}
+                style={{ minHeight: 36, padding: '6px 14px', fontSize: '0.8rem' }}
+                onClick={() => {
+                  setIsCustomPoseActive(false);
+                  onChangeTakeCount(cnt);
+                }}
+              >
+                {cnt} Pose
+              </button>
+            ))}
+
             <button
               type="button"
-              className={`btn ${takeCount === 3 ? 'active-pill' : ''}`}
+              className={`btn ${isCustomPoseActive || takeCount > 4 || takeCount === 1 ? 'active-pill' : ''}`}
               style={{ minHeight: 36, padding: '6px 14px', fontSize: '0.8rem' }}
-              onClick={() => onChangeTakeCount(3)}
+              onClick={() => {
+                setIsCustomPoseActive(true);
+                const parsed = Number.parseInt(customPoseInput, 10);
+                const clamped = Number.isFinite(parsed)
+                  ? Math.max(1, Math.min(8, parsed))
+                  : 6;
+                setCustomPoseInput(String(clamped));
+                onChangeTakeCount(clamped);
+              }}
             >
-              3 Pose
+              ✏️ Kustom (Maks 8)
             </button>
-            <button
-              type="button"
-              className={`btn ${takeCount === 4 ? 'active-pill' : ''}`}
-              style={{ minHeight: 36, padding: '6px 14px', fontSize: '0.8rem' }}
-              onClick={() => onChangeTakeCount(4)}
-            >
-              4 Pose
-            </button>
+
+            {(isCustomPoseActive || takeCount > 4 || takeCount === 1) && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  background: '#FAF7F2',
+                  border: '1.5px solid #18181B',
+                }}
+              >
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  aria-label="Input jumlah pose kustom (maksimal 8)"
+                  value={customPoseInput}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setCustomPoseInput(raw);
+                    const num = Number.parseInt(raw, 10);
+                    if (Number.isFinite(num)) {
+                      const clamped = Math.max(1, Math.min(8, num));
+                      onChangeTakeCount(clamped);
+                    }
+                  }}
+                  onBlur={() => {
+                    const num = Number.parseInt(customPoseInput, 10);
+                    const clamped = Number.isFinite(num)
+                      ? Math.max(1, Math.min(8, num))
+                      : takeCount;
+                    setCustomPoseInput(String(clamped));
+                    onChangeTakeCount(clamped);
+                  }}
+                  style={{
+                    width: 48,
+                    height: 28,
+                    borderRadius: 999,
+                    border: '1px solid rgba(24,24,27,0.35)',
+                    textAlign: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    background: '#FFFFFF',
+                    color: '#18181B',
+                  }}
+                />
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#18181B' }}>
+                  / 8 Pose
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

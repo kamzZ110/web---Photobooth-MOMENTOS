@@ -98,3 +98,8 @@ Perubahan disetujui pengguna dalam sesi brainstorming redesign UI/UX (13 Novembe
   - **Neobrutalism Modern (Flat-to-Lift & Forward Pop):** Tombol dan kartu **rata (flat, tanpa shadow)** saat diam. Tombol penting (Primary/Secondary CTA, Shutter, Export) **timbul ke depan tipis** (`scale` + shadow lembut) dan **berubah warna** saat hover; kartu preview & elemen sekunder terangkat ringan saat hover.
 - **Tambahan Beranda (Seasonal Ambient):** Menambahkan efek musiman di halaman beranda menggunakan `falling-leaves/react` (`<FallingLeaves fullScreen />`) / `react-snowfall` sesuai bulan, dengan warna menyatu dengan palet, `pointer-events: none`, dan nonaktif otomatis untuk `prefers-reduced-motion`.
 - **Tidak berubah:** Seluruh aturan produk (`LOCK-01`, `LOCK-02`, `LOCK-14`–`LOCK-20`: Classic First Solo → Duo, tanpa login/history permanen/public share link, 3/4 take, max 3 retake, reconnect 5 menit, editor netral, FLIP-TEST-01 setelah Classic).
+
+# CHG-4.1-001 — Ekspansi Pilihan Jumlah Pose Classic (2 Pose & Kustom Maks 8 Pose), 17 November 2026
+
+Atas permintaan langsung pengguna:
+- **Revisi `LOCK-14` (Jumlah Take/Pose Classic):** Selain pilihan `3 Pose` dan `4 Pose`, ditambahkan opsi cepat **`2 Pose`** serta fitur **`Kustom (Maks 8 Pose)`** dengan input angka manual (`1`–`8`) pada layar Pilih Frame (`FrameSelectScreen.tsx`) dan layar Kamera (`CameraScreen.tsx`), tersinkronisasi penuh hingga ke `@momentos/server`, Editor, dan Export Canvas 2D.

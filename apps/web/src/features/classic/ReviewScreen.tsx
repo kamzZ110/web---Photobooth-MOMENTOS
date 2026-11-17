@@ -9,7 +9,7 @@ import {
 interface ReviewScreenProps {
   mode: BoothMode;
   isNight?: boolean;
-  takeCount: 3 | 4;
+  takeCount: number;
   frames: CapturedFrame[];
   retakesRemaining: number;
   onRetakeFrame: (frameId: number) => void;

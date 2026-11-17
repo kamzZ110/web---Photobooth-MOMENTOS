@@ -71,6 +71,42 @@ const INITIAL_FRAMES: CapturedFrame[] = [
     accentBg: '#FAF7F2',
     retakeCount: 0,
   },
+  {
+    id: 5,
+    label: 'POSE 05',
+    timestamp: '00:19',
+    hostPose: '😜🤟',
+    guestPose: '🤩🎉',
+    accentBg: '#FCEEF3',
+    retakeCount: 0,
+  },
+  {
+    id: 6,
+    label: 'POSE 06',
+    timestamp: '00:23',
+    hostPose: '🥳💫',
+    guestPose: '😍🫶',
+    accentBg: '#EBF4FD',
+    retakeCount: 0,
+  },
+  {
+    id: 7,
+    label: 'POSE 07',
+    timestamp: '00:27',
+    hostPose: '😉✨',
+    guestPose: '😁✌️',
+    accentBg: '#ECF3ED',
+    retakeCount: 0,
+  },
+  {
+    id: 8,
+    label: 'POSE 08',
+    timestamp: '00:31',
+    hostPose: '🫶👑',
+    guestPose: '🌸🥰',
+    accentBg: '#FAF7F2',
+    retakeCount: 0,
+  },
 ];
 
 const AMBIENT_SCREENS: ScreenId[] = [
@@ -87,7 +123,7 @@ export const App: React.FC = () => {
   const [isNight, setIsNight] = useState<boolean>(false);
   const [season] = useState(() => detectDefaultSeason());
   const [roomState, setRoomState] = useState<RoomConnectionState>('connected');
-  const [takeCount, setTakeCount] = useState<3 | 4>(3);
+  const [takeCount, setTakeCount] = useState<number>(3);
   const [selectedFilter, setSelectedFilter] = useState<PhotoFilterId>('normal');
   const [frames, setFrames] = useState<CapturedFrame[]>(INITIAL_FRAMES);
   const [retakesRemaining, setRetakesRemaining] = useState<number>(3);
@@ -163,9 +199,10 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleChangeTakeCount = (count: 3 | 4) => {
-    setTakeCount(count);
-    realtimeClient.syncConfig({ takeCount: count });
+  const handleChangeTakeCount = (count: number) => {
+    const clamped = Math.max(1, Math.min(8, Math.round(count) || 2));
+    setTakeCount(clamped);
+    realtimeClient.syncConfig({ takeCount: clamped });
   };
 
   const handleChangeFilter = (filter: PhotoFilterId) => {

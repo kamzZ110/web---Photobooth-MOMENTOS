@@ -24,8 +24,8 @@ import {
 interface CameraScreenProps {
   mode: BoothMode;
   isNight?: boolean;
-  takeCount: 3 | 4;
-  onChangeTakeCount: (count: 3 | 4) => void;
+  takeCount: number;
+  onChangeTakeCount: (count: number) => void;
   selectedFilter: PhotoFilterId;
   onChangeFilter: (filter: PhotoFilterId) => void;
   layout?: TemplateLayoutId;
@@ -67,6 +67,20 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const [isAutoBursting, setIsAutoBursting] = useState(false);
   const [showFiltersPopover, setShowFiltersPopover] = useState(false);
   const [copiedType, setCopiedType] = useState<'none' | 'code' | 'link'>('none');
+  const [customPoseInput, setCustomPoseInput] = useState<string>(
+    takeCount > 4 || takeCount === 1 ? String(takeCount) : '6'
+  );
+  const [isCustomPoseActive, setIsCustomPoseActive] = useState<boolean>(
+    takeCount > 4 || takeCount === 1
+  );
+
+  useEffect(() => {
+    setCurrentShot((prev) => (prev >= takeCount ? 0 : prev));
+    if (takeCount > 4 || takeCount === 1) {
+      setCustomPoseInput(String(takeCount));
+      setIsCustomPoseActive(true);
+    }
+  }, [takeCount]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -628,7 +642,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 </div>
               )}
 
-              {/* Bottom-Center Inside-Viewfinder Pill: Timer (3s / 5s) + Poses */}
+              {/* Bottom-Center Inside-Viewfinder Pill: Timer (3s / 5s) + 2/3/4/Custom Poses (Max 8) */}
               <div
                 style={{
                   position: 'absolute',
@@ -636,14 +650,17 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   left: '50%',
                   transform: 'translateX(-50%)',
                   zIndex: 10,
-                  background: 'rgba(24, 24, 27, 0.78)',
+                  background: 'rgba(24, 24, 27, 0.82)',
                   backdropFilter: 'blur(8px)',
-                  padding: '5px 10px',
+                  padding: '5px 12px',
                   borderRadius: 999,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  gap: 5,
                   color: '#FFFFFF',
+                  maxWidth: '94%',
                 }}
               >
                 {([3, 5] as const).map((sec) => (
@@ -656,8 +673,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                       color: countdownSec === sec ? '#18181B' : '#FFFFFF',
                       border: 'none',
                       borderRadius: 999,
-                      padding: '3px 10px',
-                      fontSize: '0.74rem',
+                      padding: '3px 9px',
+                      fontSize: '0.73rem',
                       fontWeight: 800,
                       cursor: 'pointer',
                     }}
@@ -666,18 +683,24 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   </button>
                 ))}
                 <span style={{ opacity: 0.35 }}>|</span>
-                {([3, 4] as const).map((cnt) => (
+                {([2, 3, 4] as const).map((cnt) => (
                   <button
                     key={cnt}
                     type="button"
-                    onClick={() => onChangeTakeCount(cnt)}
+                    onClick={() => {
+                      setIsCustomPoseActive(false);
+                      onChangeTakeCount(cnt);
+                    }}
                     style={{
-                      background: takeCount === cnt ? '#BC4374' : 'transparent',
+                      background:
+                        !isCustomPoseActive && takeCount === cnt
+                          ? '#BC4374'
+                          : 'transparent',
                       color: '#FFFFFF',
                       border: 'none',
                       borderRadius: 999,
-                      padding: '3px 10px',
-                      fontSize: '0.74rem',
+                      padding: '3px 9px',
+                      fontSize: '0.73rem',
                       fontWeight: 800,
                       cursor: 'pointer',
                     }}
@@ -685,11 +708,100 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                     {cnt} Pose
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomPoseActive(true);
+                    const parsed = Number.parseInt(customPoseInput, 10);
+                    const clamped = Number.isFinite(parsed)
+                      ? Math.max(1, Math.min(8, parsed))
+                      : 6;
+                    setCustomPoseInput(String(clamped));
+                    onChangeTakeCount(clamped);
+                  }}
+                  style={{
+                    background:
+                      isCustomPoseActive || takeCount > 4 || takeCount === 1
+                        ? '#BC4374'
+                        : 'transparent',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 999,
+                    padding: '3px 9px',
+                    fontSize: '0.73rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                  title="Atur jumlah pose kustom manual (maksimal 8)"
+                >
+                  Kustom
+                </button>
+                {(isCustomPoseActive || takeCount > 4 || takeCount === 1) && (
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      marginLeft: 2,
+                    }}
+                  >
+                    <input
+                      type="number"
+                      min={1}
+                      max={8}
+                      aria-label="Input manual jumlah pose (maks 8)"
+                      value={customPoseInput}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setCustomPoseInput(raw);
+                        const num = Number.parseInt(raw, 10);
+                        if (Number.isFinite(num)) {
+                          onChangeTakeCount(Math.max(1, Math.min(8, num)));
+                        }
+                      }}
+                      onBlur={() => {
+                        const num = Number.parseInt(customPoseInput, 10);
+                        const clamped = Number.isFinite(num)
+                          ? Math.max(1, Math.min(8, num))
+                          : takeCount;
+                        setCustomPoseInput(String(clamped));
+                        onChangeTakeCount(clamped);
+                      }}
+                      style={{
+                        width: 42,
+                        height: 24,
+                        borderRadius: 999,
+                        border: '1.5px solid #FFFFFF',
+                        background: '#FFFFFF',
+                        color: '#18181B',
+                        textAlign: 'center',
+                        fontWeight: 800,
+                        fontSize: '0.76rem',
+                        padding: '0 2px',
+                      }}
+                    />
+                    <span style={{ opacity: 0.85 }}>/8</span>
+                  </label>
+                )}
               </div>
             </div>
 
             {/* Right-Side Vertical Captured Thumbnails (clean, no label inside!) */}
-            <div className="camera-side-thumbs">
+            <div
+              className="camera-side-thumbs"
+              style={
+                takeCount > 4
+                  ? {
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 8,
+                      width: 156,
+                    }
+                  : undefined
+              }
+            >
               {frames.slice(0, takeCount).map((fr, idx) => (
                 <button
                   key={fr.id}
@@ -698,7 +810,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   className="surface-light"
                   style={{
                     width: '100%',
-                    height: 82,
+                    height: takeCount > 4 ? 62 : 82,
                     padding: 0,
                     borderRadius: 12,
                     overflow: 'hidden',
