@@ -182,6 +182,8 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
         selectedFilter: msg.selectedFilter,
         layout: msg.layout,
         phase: msg.phase,
+        classicCameraEffect: msg.classicCameraEffect,
+        flipbookAccessory: msg.flipbookAccessory,
       });
       if (!res.ok) {
         sendJson(conn, {

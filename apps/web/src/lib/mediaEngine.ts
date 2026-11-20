@@ -1,6 +1,7 @@
 import {
   PHOTO_FILTER_PRESETS,
   type BoothMode,
+  type CameraAccessoryId,
   type CapturedFrame,
   type ExportFormat,
   type FlipbookEffectOverlayId,
@@ -9,6 +10,18 @@ import {
   type StickerItem,
   type TemplateLayoutId,
 } from '@momentos/shared';
+import { cameraCoverCrop, drawTrackedCameraAccessory, flipbookCameraBoxes, hasCameraFrame, type CameraBox, type FaceAnchors } from './cameraAccessories';
+
+export const FLIPBOOK_FRAME_WIDTH = 640;
+export const FLIPBOOK_FRAME_HEIGHT = 360;
+export const CLASSIC_FRAME_WIDTH = 960;
+export const CLASSIC_FRAME_HEIGHT = 540;
+
+interface ClassicPhotoEffects {
+  overlay: FlipbookEffectOverlayId;
+  poseIndex: number;
+  accessory?: { id: CameraAccessoryId; face: FaceAnchors | null; timeMs: number };
+}
 
 export async function listVideoInputDevices(): Promise<MediaDeviceInfo[]> {
   if (!navigator.mediaDevices?.enumerateDevices) return [];
@@ -16,13 +29,15 @@ export async function listVideoInputDevices(): Promise<MediaDeviceInfo[]> {
   return devices.filter((d) => d.kind === 'videoinput');
 }
 
-export async function startCameraStream(deviceId?: string): Promise<MediaStream> {
+export async function startCameraStream(deviceId?: string, size = { width: 1280, height: 960 }): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('Browser ini belum mendukung akses kamera (getUserMedia).');
   }
-  const videoConstraints: MediaTrackConstraints = deviceId
-    ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 960 } }
-    : { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } };
+  const videoConstraints: MediaTrackConstraints = {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }),
+    width: { ideal: size.width },
+    height: { ideal: size.height },
+  };
 
   return navigator.mediaDevices.getUserMedia({
     video: videoConstraints,
@@ -48,9 +63,10 @@ export function captureVideoFrameToDataUrl(
     cssFilter?: string;
     width?: number;
     height?: number;
+    effects?: ClassicPhotoEffects;
   } = {}
 ): string {
-  const { mirror = true, cssFilter = 'none', width = 960, height = 720 } = options;
+  const { mirror = true, cssFilter = 'none', width = 960, height = 720, effects } = options;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -62,29 +78,17 @@ export function captureVideoFrameToDataUrl(
 
   const vw = videoEl.videoWidth || width;
   const vh = videoEl.videoHeight || height;
-  const targetRatio = width / height;
-  const sourceRatio = vw / vh;
-
-  let sx = 0;
-  let sy = 0;
-  let sWidth = vw;
-  let sHeight = vh;
-
-  if (sourceRatio > targetRatio) {
-    sWidth = vh * targetRatio;
-    sx = (vw - sWidth) / 2;
-  } else {
-    sHeight = vw / targetRatio;
-    sy = (vh - sHeight) / 2;
-  }
+  const box = { x: 0, y: 0, width, height };
+  const crop = cameraCoverCrop(vw, vh, box);
 
   if (mirror) {
     ctx.translate(width, 0);
     ctx.scale(-1, 1);
   }
 
-  ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, width, height);
+  ctx.drawImage(videoEl, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
   ctx.restore();
+  if (effects) drawClassicPhotoEffects(ctx, box, effects, videoEl, mirror);
 
   return canvas.toDataURL('image/png');
 }
@@ -95,7 +99,8 @@ export function createSimulatedPoseDataUrl(
   bgHex: string,
   cssFilter = 'none',
   width = 960,
-  height = 720
+  height = 720,
+  effects?: ClassicPhotoEffects,
 ): string {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -128,6 +133,7 @@ export function createSimulatedPoseDataUrl(
   ctx.textBaseline = 'middle';
   ctx.fillText(poseText, width / 2, height / 2);
   ctx.restore();
+  if (effects) drawClassicPhotoEffects(ctx, { x: 0, y: 0, width, height }, effects);
 
   return canvas.toDataURL('image/png');
 }
@@ -536,139 +542,23 @@ export async function renderClassicCompositeDataUrl(params: {
   return canvas.toDataURL(mime, format === 'jpg' ? 0.92 : 1);
 }
 
-export function captureFlipbookFrameDataUrl(options: {
-  videoEl: HTMLVideoElement | null;
-  guestVideoEl?: HTMLVideoElement | null;
-  mode?: BoothMode;
-  fallbackEmoji: string;
-  frameIndex: number;
-  totalFrames: number;
-  cssFilter: string;
-  overlayId: FlipbookEffectOverlayId;
-  mirror?: boolean;
-  paperColor?: string;
-  accentHex?: string;
-  width?: number;
-  height?: number;
-}): string {
-  const {
-    videoEl,
-    guestVideoEl = null,
-    mode = 'solo',
-    fallbackEmoji,
-    frameIndex,
-    totalFrames,
-    cssFilter,
-    overlayId,
-    mirror = true,
-    paperColor = '#FBF7EF',
-    accentHex = '#BC4374',
-    width = 420,
-    height = 315,
-  } = options;
+interface FlipbookFrameAccessory { id: CameraAccessoryId; face: FaceAnchors | null }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
-
-  const drawVideoBox = (
-    vid: HTMLVideoElement,
-    bx: number,
-    by: number,
-    bw: number,
-    bh: number,
-    isMirror: boolean
-  ) => {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bx, by, bw, bh);
-    ctx.clip();
-    ctx.filter = cssFilter;
-    const vw = vid.videoWidth;
-    const vh = vid.videoHeight;
-    const targetRatio = bw / bh;
-    const sourceRatio = vw / vh;
-    let sx = 0;
-    let sy = 0;
-    let sW = vw;
-    let sH = vh;
-    if (sourceRatio > targetRatio) {
-      sW = vh * targetRatio;
-      sx = (vw - sW) / 2;
-    } else {
-      sH = vw / targetRatio;
-      sy = (vh - sH) / 2;
-    }
-    if (isMirror) {
-      ctx.translate(bx + bw, by);
-      ctx.scale(-1, 1);
-      ctx.drawImage(vid, sx, sy, sW, sH, 0, 0, bw, bh);
-    } else {
-      ctx.drawImage(vid, sx, sy, sW, sH, bx, by, bw, bh);
-    }
-    ctx.restore();
-  };
-
-  const hasLocalVideo = Boolean(
-    videoEl && videoEl.readyState >= 2 && videoEl.videoWidth > 0
-  );
-  const hasGuestVideo = Boolean(
-    guestVideoEl && guestVideoEl.readyState >= 2 && guestVideoEl.videoWidth > 0
-  );
-
-  // Base webcam frame or simulated pose (420 x 315, 4:3)
-  if (mode === 'duo' && hasLocalVideo && videoEl) {
-    const halfW = width / 2;
-    drawVideoBox(videoEl, 0, 0, halfW, height, mirror);
-    if (hasGuestVideo && guestVideoEl) {
-      drawVideoBox(guestVideoEl, halfW, 0, halfW, height, false);
-    } else {
-      ctx.save();
-      ctx.filter = cssFilter;
-      ctx.fillStyle = '#EBF4FD';
-      ctx.fillRect(halfW, 0, halfW, height);
-      ctx.fillStyle = '#18181B';
-      ctx.font = '700 48px "Segoe UI Emoji", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const bob = frameIndex % 2 === 0 ? -4 : 4;
-      const parts = fallbackEmoji.split('·');
-      ctx.fillText((parts[1] ?? '😄✨').trim(), halfW + halfW / 2, height / 2 + bob);
-      ctx.restore();
-    }
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(halfW, 0);
-    ctx.lineTo(halfW, height);
-    ctx.stroke();
-    ctx.restore();
-  } else if (hasLocalVideo && videoEl) {
-    drawVideoBox(videoEl, 0, 0, width, height, mirror);
-  } else {
-    ctx.save();
-    ctx.filter = cssFilter;
-    ctx.fillStyle = paperColor;
-    ctx.fillRect(0, 0, width, height);
-    ctx.fillStyle = '#18181B';
-    ctx.font = '700 72px "Segoe UI Emoji", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const bob = frameIndex % 2 === 0 ? -4 : 4;
-    ctx.fillText(fallbackEmoji, width / 2, height / 2 + bob);
-    ctx.restore();
-  }
-
-  // Interactive Pose Overlay Baked Into Frame
+export function drawFlipbookRecordingOverlay(
+  ctx: CanvasRenderingContext2D,
+  overlayId: FlipbookEffectOverlayId,
+  frameIndex: number,
+  totalFrames: number,
+  width: number,
+  height: number,
+): void {
+  if (overlayId === 'none') return;
   ctx.save();
   if (overlayId === 'confetti-burst') {
     const items = ['🎊', '✨', '🎉', '🌸', '⭐'];
     ctx.font = '22px sans-serif';
     items.forEach((ic, idx) => {
-      const px = 38 + idx * 84;
+      const px = width * (idx + 0.45) / items.length;
       const py = 32 + ((frameIndex * 13 + idx * 42) % (height - 64));
       ctx.fillText(ic, px, py);
     });
@@ -711,6 +601,151 @@ export function captureFlipbookFrameDataUrl(options: {
     }
   }
   ctx.restore();
+}
+
+export function drawClassicPhotoEffects(
+  ctx: CanvasRenderingContext2D,
+  box: CameraBox,
+  effects: ClassicPhotoEffects,
+  video?: HTMLVideoElement,
+  mirror = false,
+) {
+  const { accessory, overlay, poseIndex } = effects;
+  if (accessory && video) {
+    drawTrackedCameraAccessory(ctx, accessory.id, accessory.face, video.videoWidth, video.videoHeight, box, mirror, accessory.timeMs);
+  }
+  if (overlay === 'none') return;
+
+  const scale = box.height / FLIPBOOK_FRAME_HEIGHT;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(box.x, box.y, box.width, box.height);
+  ctx.clip();
+  ctx.translate(box.x, box.y);
+  ctx.scale(scale, scale);
+  drawFlipbookRecordingOverlay(ctx, overlay, (poseIndex * 12 + 3) % 60, 60, box.width / scale, box.height / scale);
+  ctx.restore();
+}
+
+export function captureFlipbookFrameDataUrl(options: {
+  videoEl: HTMLVideoElement | null;
+  guestVideoEl?: HTMLVideoElement | null;
+  mode?: BoothMode;
+  fallbackEmoji: string;
+  frameIndex: number;
+  totalFrames: number;
+  cssFilter: string;
+  overlayId: FlipbookEffectOverlayId;
+  mirror?: boolean;
+  localOnRight?: boolean;
+  accessories?: { local: FlipbookFrameAccessory; remote: FlipbookFrameAccessory; timeMs: number };
+  paperColor?: string;
+  accentHex?: string;
+  width?: number;
+  height?: number;
+}): string {
+  const {
+    videoEl,
+    guestVideoEl = null,
+    mode = 'solo',
+    fallbackEmoji,
+    frameIndex,
+    totalFrames,
+    cssFilter,
+    overlayId,
+    mirror = true,
+    localOnRight = false,
+    accessories,
+    paperColor = '#FBF7EF',
+    accentHex = '#BC4374',
+    width = FLIPBOOK_FRAME_WIDTH,
+    height = FLIPBOOK_FRAME_HEIGHT,
+  } = options;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  const drawVideoBox = (
+    vid: HTMLVideoElement,
+    box: CameraBox,
+    isMirror: boolean,
+    accessory?: FlipbookFrameAccessory,
+  ) => {
+    const { x, y, width: bw, height: bh } = box;
+    const crop = cameraCoverCrop(vid.videoWidth, vid.videoHeight, box);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, bw, bh);
+    ctx.clip();
+    ctx.filter = cssFilter;
+    ctx.translate(x + (isMirror ? bw : 0), y);
+    if (isMirror) ctx.scale(-1, 1);
+    ctx.drawImage(vid, crop.x, crop.y, crop.width, crop.height, 0, 0, bw, bh);
+    ctx.restore();
+    if (accessory && accessories) {
+      drawTrackedCameraAccessory(ctx, accessory.id, accessory.face,
+        vid.videoWidth, vid.videoHeight, box, isMirror, accessories.timeMs);
+    }
+  };
+
+  const hasLocalVideo = hasCameraFrame(videoEl);
+  const hasGuestVideo = hasCameraFrame(guestVideoEl ?? null);
+  const boxes = flipbookCameraBoxes(width, height, mode, localOnRight);
+
+  // Base webcam frame or simulated pose.
+  if (boxes.remote && (hasLocalVideo || hasGuestVideo)) {
+    const halfW = width / 2;
+    if (hasLocalVideo && videoEl) {
+      drawVideoBox(videoEl, boxes.local, mirror, accessories?.local);
+    } else {
+      ctx.fillStyle = paperColor;
+      ctx.fillRect(boxes.local.x, 0, halfW, height);
+    }
+    if (hasGuestVideo && guestVideoEl) {
+      drawVideoBox(guestVideoEl, boxes.remote, false, accessories?.remote);
+    } else {
+      ctx.save();
+      ctx.translate(boxes.remote.x - halfW, 0);
+      ctx.filter = cssFilter;
+      ctx.fillStyle = '#EBF4FD';
+      ctx.fillRect(halfW, 0, halfW, height);
+      ctx.fillStyle = '#18181B';
+      ctx.font = '700 48px "Segoe UI Emoji", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const bob = frameIndex % 2 === 0 ? -4 : 4;
+      const parts = fallbackEmoji.split('·');
+      ctx.fillText((parts[1] ?? '😄✨').trim(), halfW + halfW / 2, height / 2 + bob);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(halfW, 0);
+    ctx.lineTo(halfW, height);
+    ctx.stroke();
+    ctx.restore();
+  } else if (hasLocalVideo && videoEl) {
+    drawVideoBox(videoEl, boxes.local, mirror, accessories?.local);
+  } else {
+    ctx.save();
+    ctx.filter = cssFilter;
+    ctx.fillStyle = paperColor;
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#18181B';
+    ctx.font = '700 72px "Segoe UI Emoji", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const bob = frameIndex % 2 === 0 ? -4 : 4;
+    ctx.fillText(fallbackEmoji, width / 2, height / 2 + bob);
+    ctx.restore();
+  }
+
+  drawFlipbookRecordingOverlay(ctx, overlayId, frameIndex, totalFrames, width, height);
 
   // Registration stamp bottom right
   ctx.fillStyle = accentHex;
@@ -768,6 +803,13 @@ function drawSpiralSpine(
   ctx.restore();
 }
 
+function drawFlipbookPagePhoto(ctx: CanvasRenderingContext2D, img: HTMLImageElement, left: number, width: number, height: number) {
+  const scale = Math.min(width / img.naturalWidth, height / img.naturalHeight);
+  const photoWidth = img.naturalWidth * scale;
+  const photoHeight = img.naturalHeight * scale;
+  ctx.drawImage(img, left + (width - photoWidth) / 2, (height - photoHeight) / 2, photoWidth, photoHeight);
+}
+
 /**
  * Render Sampul Depan Buku Flipbook (Tanpa Gambar Foto) + Transisi Membuka Buku.
  */
@@ -783,8 +825,8 @@ export async function renderFlipbookCoverDataUrl(options: {
   firstPageDataUrl?: string;
 }): Promise<string> {
   const {
-    width = 420,
-    height = 315,
+    width = FLIPBOOK_FRAME_WIDTH,
+    height = FLIPBOOK_FRAME_HEIGHT,
     title,
     subtitle = 'Interactive Motion Flipbook',
     binderColor,
@@ -810,7 +852,7 @@ export async function renderFlipbookCoverDataUrl(options: {
     if (firstPageDataUrl) {
       try {
         const firstImg = await loadImage(firstPageDataUrl);
-        ctx.drawImage(firstImg, spineW, 0, bodyW, height);
+        drawFlipbookPagePhoto(ctx, firstImg, spineW, bodyW, height);
       } catch {
         // fallback to paperColor
       }
@@ -938,8 +980,8 @@ export async function buildFlipbookGifSequenceWithCover(params: {
     pageDelayMs = 85,
   } = params;
 
-  const width = 420;
-  const height = 315;
+  const width = FLIPBOOK_FRAME_WIDTH;
+  const height = FLIPBOOK_FRAME_HEIGHT;
   const spineW = 34;
   const bodyW = width - spineW;
 
@@ -997,7 +1039,7 @@ export async function buildFlipbookGifSequenceWithCover(params: {
 
     try {
       const img = await loadImage(frames[i]);
-      pCtx.drawImage(img, spineW, 0, bodyW, height);
+      drawFlipbookPagePhoto(pCtx, img, spineW, bodyW, height);
     } catch {
       // keep paperColor fallback
     }
@@ -1042,8 +1084,8 @@ export async function encodeAnimatedGifBlob(
   }
 
   const firstImg = await loadImage(frameDataUrls[0]);
-  const width = firstImg.width || 420;
-  const height = firstImg.height || 315;
+  const width = firstImg.width || FLIPBOOK_FRAME_WIDTH;
+  const height = firstImg.height || FLIPBOOK_FRAME_HEIGHT;
 
   const workCanvas = document.createElement('canvas');
   workCanvas.width = width;
@@ -1204,8 +1246,8 @@ export async function recordCanvasVideoBlob(
   }
 
   const firstImg = await loadImage(frameDataUrls[0]);
-  const width = firstImg.width || 480;
-  const height = firstImg.height || 360;
+  const width = firstImg.width || FLIPBOOK_FRAME_WIDTH;
+  const height = firstImg.height || FLIPBOOK_FRAME_HEIGHT;
 
   const canvas = document.createElement('canvas');
   canvas.width = width;

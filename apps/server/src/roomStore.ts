@@ -1,9 +1,16 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import {
   DEFAULT_STICKER_LIBRARY,
+  DEFAULT_CLASSIC_CAMERA_EFFECTS,
+  FLIPBOOK_OVERLAY_EFFECTS,
+  isCameraAccessoryId,
+  updateClassicCameraEffects,
   type AuthoritativeRoomSnapshot,
   type BoothMode,
+  type ClassicCameraEffectChange,
+  type ClassicCameraEffects,
   type CollaborativeEditorState,
+  type DuoCameraAccessories,
   type EditorOperation,
   type ParticipantRole,
   type PhotoFilterId,
@@ -38,6 +45,8 @@ interface InternalRoom {
   idleDestroyAt: number | null;
   takeCount: number;
   selectedFilter: PhotoFilterId;
+  classicCameraEffects?: ClassicCameraEffects;
+  flipbookAccessories?: DuoCameraAccessories;
   layout: TemplateLayoutId;
   retakesRemaining: number;
   participants: InternalParticipant[];
@@ -87,6 +96,11 @@ export class RoomStore {
       idleDestroyAt: room.idleDestroyAt,
       takeCount: room.takeCount,
       selectedFilter: room.selectedFilter,
+      classicCameraEffects: room.classicCameraEffects && {
+        ...room.classicCameraEffects,
+        accessories: { ...room.classicCameraEffects.accessories },
+      },
+      flipbookAccessories: room.flipbookAccessories && { ...room.flipbookAccessories },
       layout: room.layout,
       retakesRemaining: room.retakesRemaining,
       participants: room.participants.map(({ rejoinToken: _token, ...pub }) => ({ ...pub })),
@@ -387,10 +401,12 @@ export class RoomStore {
       selectedFilter?: PhotoFilterId;
       layout?: TemplateLayoutId;
       phase?: RoomSessionPhase;
+      classicCameraEffect?: unknown;
+      flipbookAccessory?: unknown;
     }
   ):
     | { ok: true; snapshot: AuthoritativeRoomSnapshot }
-    | { ok: false; errorCode: 'ROOM_NOT_FOUND' | 'FORBIDDEN_ROLE'; message: string } {
+    | { ok: false; errorCode: 'ROOM_NOT_FOUND' | 'FORBIDDEN_ROLE' | 'BAD_REQUEST'; message: string } {
     const room = this.rooms.get(code);
     if (!room) {
       return { ok: false, errorCode: 'ROOM_NOT_FOUND', message: 'Room tidak ditemukan.' };
@@ -403,10 +419,44 @@ export class RoomStore {
       };
     }
 
+    const classicEffect = patch.classicCameraEffect as ClassicCameraEffectChange | undefined;
+    if (classicEffect !== undefined) {
+      if (role !== 'host') {
+        return { ok: false, errorCode: 'FORBIDDEN_ROLE', message: 'Hanya Host yang dapat mengatur efek kamera Classic Duo.' };
+      }
+      if (room.mode !== 'duo' || !classicEffect || typeof classicEffect !== 'object' ||
+        (classicEffect.overlay === undefined && classicEffect.accessory === undefined) ||
+        (classicEffect.overlay !== undefined && !FLIPBOOK_OVERLAY_EFFECTS.some(({ id }) => id === classicEffect.overlay)) ||
+        (classicEffect.accessory !== undefined && (!classicEffect.accessory ||
+          (classicEffect.accessory.role !== 'host' && classicEffect.accessory.role !== 'guest') ||
+          !isCameraAccessoryId(classicEffect.accessory.id)))) {
+        return { ok: false, errorCode: 'BAD_REQUEST', message: 'Pilihan efek kamera Classic tidak valid.' };
+      }
+    }
+
+    if (patch.flipbookAccessory !== undefined) {
+      if (role !== 'host') {
+        return { ok: false, errorCode: 'FORBIDDEN_ROLE', message: 'Hanya Host yang bisa memilih aksesori Duo.' };
+      }
+      const accessory = patch.flipbookAccessory as { role?: unknown; id?: unknown } | null;
+      if (room.mode !== 'duo' || !accessory ||
+        (accessory.role !== 'host' && accessory.role !== 'guest') || !isCameraAccessoryId(accessory.id)) {
+        return { ok: false, errorCode: 'BAD_REQUEST', message: 'Pilihan aksesori Duo tidak valid.' };
+      }
+      room.flipbookAccessories = {
+        host: room.flipbookAccessories?.host ?? 'none',
+        guest: room.flipbookAccessories?.guest ?? 'none',
+        [accessory.role]: accessory.id,
+      };
+    }
+
     if (patch.takeCount !== undefined) {
       room.takeCount = Math.max(1, Math.min(8, Math.round(patch.takeCount)));
     }
     if (patch.selectedFilter) room.selectedFilter = patch.selectedFilter;
+    if (classicEffect) {
+      room.classicCameraEffects = updateClassicCameraEffects(room.classicCameraEffects ?? DEFAULT_CLASSIC_CAMERA_EFFECTS, classicEffect);
+    }
     if (patch.layout) {
       const prev = room.layout;
       room.layout = patch.layout;

@@ -1,16 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   PHOTO_FILTER_PRESETS,
+  DEFAULT_CLASSIC_CAMERA_EFFECTS,
+  updateClassicCameraEffects,
+  FLIPBOOK_OVERLAY_EFFECTS,
   type BoothMode,
+  type CameraAccessoryId,
   type CameraPermissionState,
   type CapturedFrame,
+  type ClassicCameraEffectChange,
+  type FlipbookEffectOverlayId,
   type PhotoFilterId,
   type ScreenId,
   type TemplateLayoutId,
 } from '@momentos/shared';
 import {
   captureVideoFrameToDataUrl,
+  CLASSIC_FRAME_HEIGHT,
+  CLASSIC_FRAME_WIDTH,
   createSimulatedPoseDataUrl,
+  drawClassicPhotoEffects,
   getCssFilterById,
   listVideoInputDevices,
   startCameraStream,
@@ -20,6 +29,10 @@ import {
   realtimeClient,
   type RealtimeClientState,
 } from '../../lib/realtimeClient';
+import { flipbookCameraBoxes, hasCameraFrame } from '../../lib/cameraAccessories';
+import { CameraChoice } from '../flipbook/CameraChoice';
+import { CameraAccessoryRail } from '../flipbook/CameraAccessoryPanel';
+import { useFaceAccessoryTracking } from '../flipbook/useFaceAccessoryTracking';
 
 interface CameraScreenProps {
   mode: BoothMode;
@@ -65,7 +78,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const [flashActive, setFlashActive] = useState(false);
   const [currentShot, setCurrentShot] = useState(0);
   const [isAutoBursting, setIsAutoBursting] = useState(false);
-  const [showFiltersPopover, setShowFiltersPopover] = useState(false);
+  const [soloOverlay, setSoloOverlay] = useState<FlipbookEffectOverlayId>('none');
+  const [soloAccessory, setSoloAccessory] = useState<CameraAccessoryId>('none');
+  const [localDuoEffects, setLocalDuoEffects] = useState(DEFAULT_CLASSIC_CAMERA_EFFECTS);
   const [copiedType, setCopiedType] = useState<'none' | 'code' | 'link'>('none');
   const [customPoseInput, setCustomPoseInput] = useState<string>(
     takeCount > 4 || takeCount === 1 ? String(takeCount) : '6'
@@ -84,17 +99,38 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const effectsCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastHandledAttemptRef = useRef<string | null>(null);
 
   const activeFilterCss = getCssFilterById(selectedFilter);
-  const activeFilterObj =
-    PHOTO_FILTER_PRESETS.find((f) => f.id === selectedFilter) ??
-    PHOTO_FILTER_PRESETS[0];
-
+  const isDuo = mode === 'duo';
   const activeRole = realtimeState?.role ?? 'host';
+  const remoteRole = activeRole === 'guest' ? 'host' : 'guest';
   const liveSnapshot = realtimeState?.snapshot;
+  const canSetDuoEffects = activeRole === 'host';
+  const activeDuoEffects = liveSnapshot?.mode === 'duo'
+    ? liveSnapshot.classicCameraEffects ?? DEFAULT_CLASSIC_CAMERA_EFFECTS
+    : localDuoEffects;
+  const overlay = isDuo ? activeDuoEffects.overlay : soloOverlay;
+  const localAccessory = isDuo ? activeDuoEffects.accessories[activeRole] : soloAccessory;
+  const remoteAccessory = isDuo ? activeDuoEffects.accessories[remoteRole] : 'none';
+  const busy = countdown !== null || isAutoBursting;
+  const remoteStream = realtimeState?.remoteStream ?? null;
+  const canTrack = permissionState === 'granted' && !useSimulation;
+  const localTracking = useFaceAccessoryTracking(videoRef, canTrack && localAccessory !== 'none');
+  const remoteTracking = useFaceAccessoryTracking(remoteVideoRef, Boolean(remoteStream) && remoteAccessory !== 'none', remoteStream);
+  const waitingForAccessory = canTrack && localAccessory !== 'none' && localTracking.status === 'loading';
+  const showCameraEffects = overlay !== 'none' || (canTrack && localAccessory !== 'none') ||
+    (Boolean(remoteStream) && remoteAccessory !== 'none');
+  const syncedRemotePhoto = activeRole === 'guest' ? frames[currentShot]?.imageDataUrl : frames[currentShot]?.guestImageDataUrl;
   const roomCode = liveSnapshot?.code ?? 'MMT-4829';
+
+  const applyDuoEffect = (change: ClassicCameraEffectChange) => {
+    if (!canSetDuoEffects) return;
+    if (liveSnapshot?.mode === 'duo') realtimeClient.syncConfig({ classicCameraEffect: change });
+    else setLocalDuoEffects((current) => updateClassicCameraEffects(current, change));
+  };
 
   const shareInviteUrl =
     typeof window !== 'undefined'
@@ -115,7 +151,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       try {
         setCameraError(null);
         stopCameraStream(streamRef.current);
-        const stream = await startCameraStream(selectedDeviceId || undefined);
+        const stream = await startCameraStream(selectedDeviceId || undefined, { width: 1280, height: 720 });
         if (!active) {
           stopCameraStream(stream);
           return;
@@ -149,26 +185,60 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   }, [permissionState, useSimulation, selectedDeviceId]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && realtimeState?.remoteStream) {
-      remoteVideoRef.current.srcObject = realtimeState.remoteStream;
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [realtimeState?.remoteStream]);
+  }, [remoteStream, isDuo, permissionState]);
+
+  useEffect(() => {
+    if (!showCameraEffects) return;
+    const ctx = effectsCanvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    const boxes = flipbookCameraBoxes(CLASSIC_FRAME_WIDTH, CLASSIC_FRAME_HEIGHT, mode, isDuo && activeRole === 'guest');
+    let frame = 0;
+    const draw = (timeMs: number) => {
+      ctx.clearRect(0, 0, CLASSIC_FRAME_WIDTH, CLASSIC_FRAME_HEIGHT);
+      const local = videoRef.current;
+      const remote = remoteVideoRef.current;
+      drawClassicPhotoEffects(ctx, boxes.local, { overlay, poseIndex: currentShot,
+        accessory: { id: localAccessory, face: localTracking.face.current, timeMs } }, hasCameraFrame(local) ? local : undefined, mirror);
+      if (boxes.remote && (remoteStream || !syncedRemotePhoto)) {
+        drawClassicPhotoEffects(ctx, boxes.remote, { overlay, poseIndex: currentShot,
+          accessory: { id: remoteAccessory, face: remoteTracking.face.current, timeMs } }, hasCameraFrame(remote) ? remote : undefined);
+      }
+      if ((canTrack && localAccessory !== 'none') || (remoteStream && remoteAccessory !== 'none')) {
+        frame = window.requestAnimationFrame(draw);
+      }
+    };
+    frame = window.requestAnimationFrame(draw);
+    return () => window.cancelAnimationFrame(frame);
+  }, [showCameraEffects, canTrack, mode, isDuo, activeRole, overlay, currentShot, localAccessory, remoteAccessory,
+    localTracking.face, remoteTracking.face, mirror, remoteStream, syncedRemotePhoto]);
 
   const performSnapAtIndex = (slotIdx: number) => {
     const targetFrame = frames[slotIdx];
+    const width = isDuo ? CLASSIC_FRAME_WIDTH / 2 : CLASSIC_FRAME_WIDTH;
+    const height = CLASSIC_FRAME_HEIGHT;
+    const effects = { overlay, poseIndex: slotIdx };
     let dataUrl = '';
 
-    if (!useSimulation && videoRef.current && videoRef.current.readyState >= 2) {
+    if (!useSimulation && hasCameraFrame(videoRef.current)) {
       dataUrl = captureVideoFrameToDataUrl(videoRef.current, {
         mirror,
         cssFilter: activeFilterCss,
+        width,
+        height,
+        effects: { ...effects, accessory: { id: localAccessory, face: localTracking.face.current, timeMs: performance.now() } },
       });
     } else if (targetFrame) {
       dataUrl = createSimulatedPoseDataUrl(
         activeRole === 'guest' ? targetFrame.guestPose : targetFrame.hostPose,
         `${targetFrame.label} (${activeRole.toUpperCase()})`,
         activeRole === 'guest' ? '#EBF4FD' : targetFrame.accentBg,
-        activeFilterCss
+        activeFilterCss,
+        width,
+        height,
+        effects,
       );
     }
 
@@ -183,7 +253,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           targetFrame.guestPose,
           `${targetFrame.label} (GUEST)`,
           '#EBF4FD',
-          activeFilterCss
+          activeFilterCss,
+          width,
+          height,
+          effects,
         );
         onCaptureFrame(slotIdx, guestSimUrl, 'guest');
       }
@@ -224,8 +297,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   }, [realtimeState?.lastScheduledCountdown]);
 
   const triggerSingleShot = (slotOverride?: number) => {
-    if (countdown !== null || isAutoBursting) return;
-    setShowFiltersPopover(false);
+    if (busy || waitingForAccessory) return;
     const targetIndex = slotOverride ?? currentShot;
 
     if (mode === 'duo' && liveSnapshot) {
@@ -252,8 +324,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   };
 
   const triggerAutoCaptureSequence = () => {
-    if (countdown !== null || isAutoBursting) return;
-    setShowFiltersPopover(false);
+    if (busy || waitingForAccessory) return;
     setIsAutoBursting(true);
     let idx = 0;
 
@@ -295,7 +366,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     .filter((f) => Boolean(f.imageDataUrl)).length;
 
   return (
-    <div className="page-stack" style={{ maxWidth: 880, margin: '0 auto' }}>
+    <div className="page-stack" style={{ maxWidth: 1440, margin: '0 auto' }}>
       <section>
         {/* Clean 4-Step Progress Bar */}
         <div
@@ -448,221 +519,204 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             </button>
           </div>
         ) : (
-          <div className="camera-stage-row">
-            {/* Centered Rounded Viewfinder */}
-            <div
-              className={`camera-viewfinder-grid ${mode === 'duo' ? 'is-duo' : ''}`}
-            >
-              {flashActive && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 30,
-                    background: '#FFFFFF',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-
-              {countdown !== null && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 25,
-                    background: 'rgba(24, 24, 27, 0.42)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#FFFFFF',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontFamily: 'var(--primitive-font-heading)',
-                      fontSize: '5rem',
-                      fontWeight: 800,
-                      lineHeight: 1,
-                    }}
-                  >
-                    {countdown}
-                  </div>
-                  <div style={{ fontWeight: 700, marginTop: 8, fontSize: '0.95rem' }}>
-                    Pose #{currentShot + 1} — Senyum!
-                  </div>
-                </div>
-              )}
-
-              {/* Primary Host / Solo Camera Feed */}
+          <div className="flipbook-camera-layout classic-camera-layout">
+            <div className="flipbook-camera-stage">
+              {/* Centered Rounded Viewfinder */}
               <div
-                className={useSimulation ? 'surface-light' : undefined}
-                style={{
-                  position: 'relative',
-                  background: useSimulation ? '#FCEEF3' : '#09090B',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  minHeight: 410,
-                }}
+                className="classic-camera-viewfinder" data-duo={isDuo}
+                style={{ aspectRatio: CLASSIC_FRAME_WIDTH + ' / ' + CLASSIC_FRAME_HEIGHT }}
               >
-                {mode === 'duo' && (
-                  <span
+                {flashActive && (
+                  <div
                     style={{
                       position: 'absolute',
-                      top: 12,
-                      left: 12,
-                      zIndex: 5,
-                      background: 'rgba(24,24,27,0.75)',
-                      color: '#FFFFFF',
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      padding: '3px 9px',
-                      borderRadius: 999,
-                    }}
-                  >
-                    {activeRole.toUpperCase()}
-                  </span>
-                )}
-
-                {!useSimulation ? (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      maxHeight: 460,
-                      objectFit: 'cover',
-                      transform: mirror ? 'scaleX(-1)' : 'none',
-                      filter: activeFilterCss,
-                      transition: 'filter 0.2s ease',
+                      inset: 0,
+                      zIndex: 30,
+                      background: '#FFFFFF',
+                      pointerEvents: 'none',
                     }}
                   />
-                ) : (
+                )}
+
+                {countdown !== null && (
                   <div
                     style={{
-                      textAlign: 'center',
-                      filter: activeFilterCss,
-                      padding: 20,
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 25,
+                      background: 'rgba(24, 24, 27, 0.42)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#FFFFFF',
                     }}
                   >
-                    <div style={{ fontSize: '4.6rem', marginBottom: 8 }}>
-                      {frames[currentShot]?.hostPose ?? '😊✌️'}
+                    <div
+                      style={{
+                        fontFamily: 'var(--primitive-font-heading)',
+                        fontSize: '5rem',
+                        fontWeight: 800,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {countdown}
                     </div>
-                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#18181B' }}>
-                      {mode === 'duo' ? 'Kamera Host (Simulasi)' : 'Kamera Simulasi'}
+                    <div style={{ fontWeight: 700, marginTop: 8, fontSize: '0.95rem' }}>
+                      Pose #{currentShot + 1} — Senyum!
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Partner Split Feed in Duo Mode */}
-              {mode === 'duo' && (
+                {/* Primary Host / Solo Camera Feed */}
                 <div
-                  className={!realtimeState?.remoteStream ? 'surface-light' : undefined}
+                  className={useSimulation ? 'surface-light' : undefined}
                   style={{
                     position: 'relative',
-                    background: realtimeState?.remoteStream ? '#09090B' : '#EBF4FD',
-                    borderLeft: '2px solid rgba(255,255,255,0.22)',
+                    order: isDuo && activeRole === 'guest' ? 1 : 0,
+                    background: useSimulation ? '#FCEEF3' : '#09090B',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'hidden',
-                    minHeight: 410,
                   }}
                 >
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 12,
-                      right: 12,
-                      zIndex: 5,
-                      background: 'rgba(24,24,27,0.75)',
-                      color: '#FFFFFF',
-                      fontSize: '0.68rem',
-                      fontWeight: 800,
-                      padding: '3px 9px',
-                      borderRadius: 999,
-                    }}
-                  >
-                    {realtimeState?.remoteStream
-                      ? 'PARTNER LIVE WEBRTC'
-                      : frames[currentShot]?.guestImageDataUrl
-                      ? 'GUEST SYNCED ✓'
-                      : 'GUEST FEED'}
-                  </span>
+                  {mode === 'duo' && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 12,
+                        left: 12,
+                        zIndex: 5,
+                        background: 'rgba(24,24,27,0.75)',
+                        color: '#FFFFFF',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '3px 9px',
+                        borderRadius: 999,
+                      }}
+                    >
+                      {activeRole.toUpperCase()}
+                    </span>
+                  )}
 
-                  {realtimeState?.remoteStream ? (
+                  {!useSimulation ? (
                     <video
-                      ref={remoteVideoRef}
+                      ref={videoRef}
+                      aria-label={isDuo ? "Kamera " + activeRole : "Kamera kamu"}
                       autoPlay
                       playsInline
                       muted
                       style={{
                         width: '100%',
                         height: '100%',
-                        maxHeight: 460,
                         objectFit: 'cover',
+                        transform: mirror ? 'scaleX(-1)' : 'none',
                         filter: activeFilterCss,
-                      }}
-                    />
-                  ) : frames[currentShot]?.guestImageDataUrl ? (
-                    <img
-                      src={frames[currentShot].guestImageDataUrl}
-                      alt="Guest Synced"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        maxHeight: 460,
-                        objectFit: 'cover',
-                        filter: activeFilterCss,
+                        transition: 'filter 0.2s ease',
                       }}
                     />
                   ) : (
                     <div
                       style={{
                         textAlign: 'center',
-                        padding: 20,
                         filter: activeFilterCss,
+                        padding: 20,
                       }}
                     >
-                      <div style={{ fontSize: '4.4rem', marginBottom: 8 }}>
-                        {frames[currentShot]?.guestPose ?? '😄🫶'}
+                      <div style={{ fontSize: '4.6rem', marginBottom: 8 }}>
+                        {(activeRole === 'guest' ? frames[currentShot]?.guestPose : frames[currentShot]?.hostPose) ?? '😊✌️'}
                       </div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#18181B' }}>
-                        Menunggu kamera Guest
+                      <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#18181B' }}>
+                        {mode === 'duo' ? 'Kamera ' + activeRole + ' (Simulasi)' : 'Kamera Simulasi'}
                       </div>
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* Bottom-Center Inside-Viewfinder Pill: Timer (3s / 5s) + 2/3/4/Custom Poses (Max 8) */}
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 14,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  zIndex: 10,
-                  background: 'rgba(24, 24, 27, 0.82)',
-                  backdropFilter: 'blur(8px)',
-                  padding: '5px 12px',
-                  borderRadius: 999,
-                  display: 'flex',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  justifyContent: 'center',
-                  gap: 5,
-                  color: '#FFFFFF',
-                  maxWidth: '94%',
-                }}
-              >
+                {/* Partner Split Feed in Duo Mode */}
+                {mode === 'duo' && (
+                  <div
+                    className={!remoteStream ? 'surface-light' : undefined}
+                    style={{
+                      position: 'relative',
+                      order: activeRole === 'guest' ? 0 : 1,
+                      background: remoteStream ? '#09090B' : '#EBF4FD',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 12,
+                        right: 12,
+                        zIndex: 5,
+                        background: 'rgba(24,24,27,0.75)',
+                        color: '#FFFFFF',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        padding: '3px 9px',
+                        borderRadius: 999,
+                      }}
+                    >
+                      {remoteRole.toUpperCase() + (remoteStream ? ' LIVE' : syncedRemotePhoto ? ' TERSINKRON' : '')}
+                    </span>
+
+                    {remoteStream ? (
+                      <video
+                        ref={remoteVideoRef}
+                        aria-label={"Kamera " + remoteRole}
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          filter: activeFilterCss,
+                        }}
+                      />
+                    ) : syncedRemotePhoto ? (
+                      <img
+                        src={syncedRemotePhoto}
+                        alt={"Foto " + remoteRole}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          textAlign: 'center',
+                          padding: 20,
+                          filter: activeFilterCss,
+                        }}
+                      >
+                        <div style={{ fontSize: '4.4rem', marginBottom: 8 }}>
+                          {(remoteRole === 'host' ? frames[currentShot]?.hostPose : frames[currentShot]?.guestPose) ?? '😄🫶'}
+                        </div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#18181B' }}>
+                          Menunggu kamera {remoteRole}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isDuo && <span className="camera-duo-divider" aria-hidden="true" />}
+                {showCameraEffects && (
+                  <canvas ref={effectsCanvasRef} className="flipbook-preview-effects"
+                    width={CLASSIC_FRAME_WIDTH} height={CLASSIC_FRAME_HEIGHT} aria-hidden="true" />
+                )}
+
+              </div>
+
+              <fieldset className="classic-camera-take-options" aria-label="Timer dan jumlah pose" disabled={busy}>
                 {([3, 5] as const).map((sec) => (
                   <button
                     key={sec}
@@ -785,81 +839,167 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                     <span style={{ opacity: 0.85 }}>/8</span>
                   </label>
                 )}
-              </div>
-            </div>
+              </fieldset>
 
-            {/* Right-Side Vertical Captured Thumbnails (clean, no label inside!) */}
-            <div
-              className="camera-side-thumbs"
-              style={
-                takeCount > 4
-                  ? {
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: 8,
-                      width: 156,
-                    }
-                  : undefined
-              }
-            >
-              {frames.slice(0, takeCount).map((fr, idx) => (
-                <button
-                  key={fr.id}
-                  type="button"
-                  onClick={() => setCurrentShot(idx)}
-                  className="surface-light"
-                  style={{
-                    width: '100%',
-                    height: takeCount > 4 ? 62 : 82,
-                    padding: 0,
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    border:
-                      currentShot === idx
-                        ? '3px solid #BC4374'
-                        : '1.5px solid #18181B',
-                    background: fr.accentBg,
-                    cursor: 'pointer',
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  title={`Pilih slot Pose #${idx + 1}`}
-                >
-                  {mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl ? (
-                    <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+              {localAccessory !== 'none' && (
+                <p className="text-muted classic-camera-status" role="status">
+                  {!canTrack ? 'Aksesori wajah tersedia saat kamera aktif.'
+                    : waitingForAccessory ? 'Menyiapkan pelacakan wajah.'
+                    : localTracking.status === 'unavailable' ? 'Pelacakan wajah belum tersedia.'
+                    : localTracking.status === 'searching' ? 'Arahkan wajah ke kamera untuk melihat aksesori.'
+                    : 'Aksesori wajah aktif.'}
+                </p>
+              )}
+              <fieldset className="flipbook-camera-accessories" aria-label="Aksesori Kamera" disabled={busy}>
+                <h2>Aksesori</h2>
+                {isDuo ? (
+                  <div className="flipbook-duo-accessories">
+                    {(['host', 'guest'] as const).map((role) => (
+                      <div key={role}>
+                        <h3>{role === 'host' ? 'Host' : 'Guest'}</h3>
+                        <CameraAccessoryRail label={'Aksesori ' + role} selected={activeDuoEffects.accessories[role]}
+                          disabled={!canSetDuoEffects} onSelect={(id) => applyDuoEffect({ accessory: { role, id } })} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <CameraAccessoryRail label="Aksesori kamu" selected={soloAccessory} onSelect={setSoloAccessory} />
+                )}
+              </fieldset>
+              <div className="classic-pose-thumbs" role="group" aria-label="Slot pose">
+                {frames.slice(0, takeCount).map((fr, idx) => (
+                  <button
+                    key={fr.id}
+                    type="button"
+                    onClick={() => setCurrentShot(idx)}
+                    aria-pressed={currentShot === idx}
+                    disabled={busy}
+                    className="surface-light"
+                    style={{
+                      width: takeCount > 4 ? 54 : 66,
+                      height: takeCount > 4 ? 38 : 46,
+                      padding: 0,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      border:
+                        currentShot === idx
+                          ? '3px solid #BC4374'
+                          : '1.5px solid #18181B',
+                      background: fr.accentBg,
+                      cursor: 'pointer',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    title={`Pilih slot Pose #${idx + 1}`}
+                  >
+                    {mode === 'duo' && fr.imageDataUrl && fr.guestImageDataUrl ? (
+                      <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                        <img
+                          src={fr.imageDataUrl}
+                          alt={`${fr.label} Host`}
+                          style={{ width: '50%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <img
+                          src={fr.guestImageDataUrl}
+                          alt={`${fr.label} Guest`}
+                          style={{ width: '50%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+                    ) : fr.imageDataUrl ? (
                       <img
                         src={fr.imageDataUrl}
-                        alt={`${fr.label} Host`}
-                        style={{ width: '50%', height: '100%', objectFit: 'cover' }}
+                        alt={fr.label}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
-                      <img
-                        src={fr.guestImageDataUrl}
-                        alt={`${fr.label} Guest`}
-                        style={{ width: '50%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </div>
-                  ) : fr.imageDataUrl ? (
-                    <img
-                      src={fr.imageDataUrl}
-                      alt={fr.label}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: '0.72rem',
-                        fontWeight: 800,
-                        color: '#18181B',
-                      }}
-                    >
-                      {idx + 1}/{takeCount}
-                    </span>
-                  )}
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          color: '#18181B',
+                        }}
+                      >
+                        {idx + 1}/{takeCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="classic-camera-actions">
+                <button
+                  type="button"
+                  className="btn btn-lift"
+                  style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
+                  disabled={busy}
+                  onClick={() => setMirror((m) => !m)}
+                  title="Balik cermin kamera"
+                >
+                  🪞 {mirror ? 'Mirror ON' : 'Mirror OFF'}
                 </button>
-              ))}
+
+                <button
+                  type="button"
+                  className="btn btn-primary-pop"
+                  style={{ minHeight: 50, padding: '10px 28px', fontSize: '0.96rem' }}
+                  disabled={
+                    busy || waitingForAccessory ||
+                    (mode === 'duo' && (!hostReady || !guestReady))
+                  }
+                  onClick={triggerAutoCaptureSequence}
+                >
+                  {isAutoBursting
+                    ? `📸 Memotret ${currentShot + 1}/${takeCount}...`
+                    : `📷 Ambil Foto (${takeCount}× Otomatis)`}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-lift"
+                  style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
+                  disabled={
+                    busy || waitingForAccessory ||
+                    (mode === 'duo' && (!hostReady || !guestReady))
+                  }
+                  onClick={() => triggerSingleShot()}
+                >
+                  Jepret Pose #{currentShot + 1}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary-pop"
+                  style={{ minHeight: 46, padding: '8px 18px', fontSize: '0.84rem' }}
+                  disabled={busy}
+                  onClick={() => onNavigate('editor')}
+                >
+                  Lihat Hasil →
+                </button>
+              </div>
             </div>
+            <fieldset className="flipbook-choice-panel flipbook-filter-panel" aria-label="Filter warna kamera"
+              disabled={busy || (isDuo && !canSetDuoEffects)}>
+              <h2>Filter</h2>
+              <div className="flipbook-side-choices">
+                {PHOTO_FILTER_PRESETS.map((filter) => (
+                  <CameraChoice key={filter.id} label={filter.name} cssFilter={filter.cssFilter}
+                    selected={selectedFilter === filter.id} onSelect={() => onChangeFilter(filter.id)} />
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="flipbook-choice-panel flipbook-overlay-panel" aria-label="Overlay kamera"
+              disabled={busy || (isDuo && !canSetDuoEffects)}>
+              <h2>Overlay</h2>
+              <div className="flipbook-side-choices">
+                {FLIPBOOK_OVERLAY_EFFECTS.map((effect) => (
+                  <CameraChoice key={effect.id} label={effect.label} overlay={effect.id}
+                    selected={overlay === effect.id} description={effect.description}
+                    onSelect={() => isDuo ? applyDuoEffect({ overlay: effect.id }) : setSoloOverlay(effect.id)} />
+                ))}
+              </div>
+              {isDuo && !canSetDuoEffects && <p className="text-muted flipbook-camera-control-note">Efek kamera Duo diatur oleh Host.</p>}
+            </fieldset>
           </div>
         )}
 
@@ -960,151 +1100,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           </div>
         )}
 
-        {/* Filter-Only Popover + Minimal Bottom Camera Controls */}
-        <div
-          style={{
-            position: 'relative',
-            marginTop: 18,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          {showFiltersPopover && (
-            <div
-              className="clean-card surface-light"
-              style={{
-                width: '100%',
-                maxWidth: 620,
-                padding: '14px 16px',
-                background: '#FFFFFF',
-                zIndex: 20,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 10,
-                }}
-              >
-                <strong style={{ fontSize: '0.84rem', color: '#18181B' }}>
-                  ✨ Pilih Filter Kamera ({activeFilterObj.name})
-                </strong>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ minHeight: 28, padding: '2px 10px', fontSize: '0.76rem' }}
-                  onClick={() => setShowFiltersPopover(false)}
-                >
-                  ✕ Tutup
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {PHOTO_FILTER_PRESETS.map((flt) => (
-                  <button
-                    key={flt.id}
-                    type="button"
-                    className={`btn btn-lift ${
-                      selectedFilter === flt.id ? 'active-pill' : ''
-                    }`}
-                    style={{
-                      minHeight: 36,
-                      padding: '4px 12px',
-                      fontSize: '0.78rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                    onClick={() => onChangeFilter(flt.id)}
-                  >
-                    <span
-                      style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        background: flt.previewBg,
-                        border: '1px solid #18181B',
-                      }}
-                    />
-                    {flt.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Primary Compact Shutter Row (Only Mirror, Filter Popover, Capture, & Finish) */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
-            <button
-              type="button"
-              className="btn btn-lift"
-              style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
-              onClick={() => setMirror((m) => !m)}
-              title="Balik cermin kamera"
-            >
-              🪞 {mirror ? 'Mirror ON' : 'Mirror OFF'}
-            </button>
-
-            <button
-              type="button"
-              className={`btn btn-lift ${showFiltersPopover ? 'active-pill' : ''}`}
-              style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
-              onClick={() => setShowFiltersPopover((prev) => !prev)}
-            >
-              ✨ Filter: {activeFilterObj.name}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-primary-pop"
-              style={{ minHeight: 50, padding: '10px 28px', fontSize: '0.96rem' }}
-              disabled={
-                countdown !== null ||
-                isAutoBursting ||
-                (mode === 'duo' && (!hostReady || !guestReady))
-              }
-              onClick={triggerAutoCaptureSequence}
-            >
-              {isAutoBursting
-                ? `📸 Memotret ${currentShot + 1}/${takeCount}...`
-                : `📷 Ambil Foto (${takeCount}× Otomatis)`}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-lift"
-              style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
-              disabled={
-                countdown !== null ||
-                isAutoBursting ||
-                (mode === 'duo' && (!hostReady || !guestReady))
-              }
-              onClick={() => triggerSingleShot()}
-            >
-              Jepret Pose #{currentShot + 1}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary-pop"
-              style={{ minHeight: 46, padding: '8px 18px', fontSize: '0.84rem' }}
-              onClick={() => onNavigate('editor')}
-            >
-              Lihat Hasil →
-            </button>
-          </div>
-        </div>
       </section>
     </div>
   );

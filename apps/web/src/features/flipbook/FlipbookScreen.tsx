@@ -4,6 +4,7 @@ import {
   FLIPBOOK_PRESETS,
   PHOTO_FILTER_PRESETS,
   type BoothMode,
+  type CameraAccessoryId,
   type ExportStatus,
   type FlipbookEffectOverlayId,
   type FlipbookPoseMode,
@@ -15,6 +16,9 @@ import { MiniCameraStripIcon } from '../../components/InstantCameraRig';
 import {
   buildFlipbookGifSequenceWithCover,
   captureFlipbookFrameDataUrl,
+  drawFlipbookRecordingOverlay,
+  FLIPBOOK_FRAME_WIDTH as CAPTURE_WIDTH,
+  FLIPBOOK_FRAME_HEIGHT as CAPTURE_HEIGHT,
   encodeAnimatedGifBlob,
   getCssFilterById,
   recordCanvasVideoBlob,
@@ -27,6 +31,12 @@ import {
   realtimeClient,
   type RealtimeClientState,
 } from '../../lib/realtimeClient';
+import { EffectDemoPanel, EffectDemoPicker, GestureDemo } from './EffectDemoPanel';
+import { EFFECT_DEMOS, type EffectDemoId } from './effectDemos';
+import { CameraAccessoryDemo, CameraAccessoryRail } from './CameraAccessoryPanel';
+import { CameraChoice } from './CameraChoice';
+import { useFaceAccessoryTracking } from './useFaceAccessoryTracking';
+import { drawTrackedCameraAccessory, flipbookCameraBoxes, hasCameraFrame } from '../../lib/cameraAccessories';
 
 interface FlipbookScreenProps {
   mode: BoothMode;
@@ -42,14 +52,13 @@ type FlipbookStep = 1 | 2 | 3 | 4 | 5 | 6;
 const TOTAL_FRAMES = 60;
 const CAPTURE_FPS = 6;
 const CAPTURE_INTERVAL_MS = 166; // ~60 frames in 10 seconds (6 FPS)
-const CAPTURE_WIDTH = 420;
-const CAPTURE_HEIGHT = 315;
+const CAPTURE_ASPECT_RATIO = `${CAPTURE_WIDTH} / ${CAPTURE_HEIGHT}`;
 const GIF_PAGE_DELAY_MS = 85; // ~12 FPS fast book flip
 
 const FLIPBOOK_STEPS: Array<{ step: FlipbookStep; num: string; label: string }> = [
   { step: 1, num: '01', label: 'Cara Kerja & Efek' },
   { step: 2, num: '02', label: 'Pilih Mode' },
-  { step: 3, num: '03', label: 'Tema & Filter' },
+  { step: 3, num: '03', label: 'Tema Sampul' },
   { step: 4, num: '04', label: 'Take Flipbook' },
   { step: 5, num: '05', label: 'Preview & Retake' },
   { step: 6, num: '06', label: 'Unduh .GIF' },
@@ -88,24 +97,41 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
   const [presetId, setPresetId] = useState<FlipbookPresetId>('retro-bounce');
   const [poseMode, setPoseMode] = useState<FlipbookPoseMode>('guided');
   const [overlayId, setOverlayId] = useState<FlipbookEffectOverlayId>('confetti-burst');
+  const [demoId, setDemoId] = useState<EffectDemoId>('comic-boom');
+  const [showCameraDemo, setShowCameraDemo] = useState(false);
+  const selectedDemo = EFFECT_DEMOS.find((effect) => effect.id === demoId) ?? EFFECT_DEMOS[0];
 
   // Step 1 Interactive Showcase animation tick
   const [showcaseTick, setShowcaseTick] = useState<number>(0);
+  const [showcaseOverlayId, setShowcaseOverlayId] = useState<FlipbookEffectOverlayId>('confetti-burst');
+  const showcaseOverlay = FLIPBOOK_OVERLAY_EFFECTS.find((effect) => effect.id === showcaseOverlayId) ?? FLIPBOOK_OVERLAY_EFFECTS[0];
 
   // Step 2 Duo Host / Guest Join states (no name input!)
   const [guestInputCode, setGuestInputCode] = useState('');
   const [copiedType, setCopiedType] = useState<'none' | 'code' | 'link'>('none');
 
-  // Step 4 Camera & Recording states (420x315, 60 frames in 10s @ 6 FPS)
+  // Step 4 Camera & Recording states
   const [useSimulation, setUseSimulation] = useState(false);
   const [mirror, setMirror] = useState(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [localPlaying, setLocalPlaying] = useState(false);
+  const [remotePlaying, setRemotePlaying] = useState(false);
+  const [soloAccessory, setSoloAccessory] = useState<CameraAccessoryId>('none');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const previewEffectsRef = useRef<HTMLCanvasElement>(null);
+  const recordingPreviewFrame = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimers = useRef<number[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [takeSettings, setTakeSettings] = useState<{
+    filter: PhotoFilterId;
+    local: CameraAccessoryId;
+    remote: CameraAccessoryId;
+  } | null>(null);
   const [recordedCount, setRecordedCount] = useState<number>(0);
   const [capturedFrames, setCapturedFrames] = useState<string[]>([]);
   const [retakesLeft, setRetakesLeft] = useState<number>(3);
@@ -129,10 +155,9 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
     [presetId]
   );
 
-  const activeFilter = useMemo(
-    () => PHOTO_FILTER_PRESETS.find((f) => f.id === selectedFilter) ?? PHOTO_FILTER_PRESETS[0],
-    [selectedFilter]
-  );
+  const takeActive = isRecording || countdown !== null;
+  const cameraFilter = takeActive ? takeSettings?.filter ?? selectedFilter : selectedFilter;
+  const activeFilter = PHOTO_FILTER_PRESETS.find((filter) => filter.id === cameraFilter) ?? PHOTO_FILTER_PRESETS[0];
 
   const activeOverlay = useMemo(
     () =>
@@ -144,11 +169,30 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
   const activeFrameTotal = capturedFrames.length > 0 ? capturedFrames.length : TOTAL_FRAMES;
 
   const liveSnapshot = realtimeState?.snapshot;
-  const roomCode = liveSnapshot?.code ?? 'MMT-4829';
-  const shareInviteUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}?room=${roomCode}&flow=flipbook`
-      : `?room=${roomCode}&flow=flipbook`;
+  const isDuo = mode === 'duo';
+  const guestOnThisDevice = isDuo && realtimeState?.role === 'guest';
+  const duoRoom = isDuo && liveSnapshot?.mode === 'duo' ? liveSnapshot : null;
+  const canSetDuoAccessories = !!duoRoom && realtimeState?.role === 'host';
+  const duoAccessories = duoRoom?.flipbookAccessories;
+  const selectedLocalAccessory = isDuo ? duoAccessories?.[guestOnThisDevice ? 'guest' : 'host'] ?? 'none' : soloAccessory;
+  const selectedRemoteAccessory = isDuo ? duoAccessories?.[guestOnThisDevice ? 'host' : 'guest'] ?? 'none' : 'none';
+  const localAccessory = takeActive ? takeSettings?.local ?? selectedLocalAccessory : selectedLocalAccessory;
+  const remoteAccessory = takeActive ? takeSettings?.remote ?? selectedRemoteAccessory : selectedRemoteAccessory;
+  const hasAccessories = localAccessory !== 'none' || remoteAccessory !== 'none';
+  const trackAccessories = step === 4 && !useSimulation && hasAccessories;
+  const showPreviewEffects = step === 4 && (trackAccessories || overlayId !== 'none');
+  const remoteStream = realtimeState?.remoteStream ?? null;
+  const { face: localFace, status: localTracking } = useFaceAccessoryTracking(
+    videoRef, trackAccessories && localAccessory !== 'none',
+  );
+  const { face: remoteFace, status: remoteTracking } = useFaceAccessoryTracking(
+    remoteVideoRef, trackAccessories && remoteAccessory !== 'none' && !!remoteStream, remoteStream,
+  );
+  const trackingLoading = [localTracking, remoteTracking].includes('loading');
+  const trackingUnavailable = [localTracking, remoteTracking].includes('unavailable');
+  const waitingForCameras = !localPlaying || (isDuo && !remotePlaying);
+  const accessorySetupBlocked = hasAccessories && (useSimulation || waitingForCameras || trackingLoading || trackingUnavailable);
+  const roomCode = duoRoom?.code;
 
   // Step 1 mini showcase animation loop
   useEffect(() => {
@@ -182,6 +226,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
   // Start / Stop live webcam feed when on Step 4 (Take Flipbook)
   useEffect(() => {
     let active = true;
+    setLocalPlaying(false);
 
     if (step !== 4) {
       stopCameraStream(streamRef.current);
@@ -198,13 +243,13 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
       try {
         setCameraError(null);
         stopCameraStream(streamRef.current);
-        const stream = await startCameraStream();
+        const stream = await startCameraStream(undefined, { width: CAPTURE_WIDTH * 2, height: CAPTURE_HEIGHT * 2 });
         if (!active) {
           stopCameraStream(stream);
           return;
         }
         streamRef.current = stream;
-        realtimeClient.attachLocalStream(stream);
+        if (isDuo) realtimeClient.attachLocalStream(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -223,16 +268,50 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
 
     return () => {
       active = false;
+      if (isDuo && streamRef.current) realtimeClient.attachLocalStream(null);
       stopCameraStream(streamRef.current);
       streamRef.current = null;
     };
-  }, [step, useSimulation]);
+  }, [step, useSimulation, isDuo]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && realtimeState?.remoteStream) {
-      remoteVideoRef.current.srcObject = realtimeState.remoteStream;
+    setRemotePlaying(false);
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [realtimeState?.remoteStream, step]);
+  }, [remoteStream, step, useSimulation, isDuo]);
+
+  useEffect(() => () => countdownTimers.current.forEach((timer) => window.clearTimeout(timer)), []);
+
+  useEffect(() => {
+    if (!showPreviewEffects) return;
+    const ctx = previewEffectsRef.current?.getContext('2d');
+    if (!ctx) return;
+    const boxes = flipbookCameraBoxes(CAPTURE_WIDTH, CAPTURE_HEIGHT, mode, guestOnThisDevice);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const startedAt = performance.now();
+    let frame = 0;
+    let lastOverlayIndex = -1;
+
+    const paint = (now: number) => {
+      frame = window.requestAnimationFrame(paint);
+      const idleIndex = reducedMotion ? 0 : Math.floor(Math.max(0, now - startedAt) / CAPTURE_INTERVAL_MS) % TOTAL_FRAMES;
+      const overlayIndex = isRecording ? recordingPreviewFrame.current : idleIndex;
+      if (!trackAccessories && overlayIndex === lastOverlayIndex) return;
+      lastOverlayIndex = overlayIndex;
+      ctx.clearRect(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+      const local = videoRef.current;
+      const remote = remoteVideoRef.current;
+      if (hasCameraFrame(local)) drawTrackedCameraAccessory(ctx, localAccessory, localFace.current,
+        local.videoWidth, local.videoHeight, boxes.local, mirror, now);
+      if (boxes.remote && hasCameraFrame(remote)) drawTrackedCameraAccessory(ctx, remoteAccessory, remoteFace.current,
+        remote.videoWidth, remote.videoHeight, boxes.remote, false, now);
+      drawFlipbookRecordingOverlay(ctx, overlayId, overlayIndex, TOTAL_FRAMES, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    };
+    frame = window.requestAnimationFrame(paint);
+    return () => window.cancelAnimationFrame(frame);
+  }, [showPreviewEffects, trackAccessories, mode, guestOnThisDevice, localAccessory, remoteAccessory, mirror,
+    localFace, remoteFace, overlayId, isRecording]);
 
   // Playback loop for Step 5 & Step 6
   useEffect(() => {
@@ -261,7 +340,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
     return () => window.clearInterval(timer);
   }, [step, isPlaying, isRecording, playbackSpeed, bounceDirection, activeFrameTotal, showCoverInStep6]);
 
-  // Step 4: Record 60 frames over 10 seconds (~6 FPS, 166ms/frame) at 420x315 px
+  // Step 4: Record the camera sequence.
   useEffect(() => {
     if (!isRecording) return;
     setRecordedCount(0);
@@ -269,18 +348,28 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
     setCurrentFrame(0);
 
     const collected: string[] = [];
-    const cssFilter = getCssFilterById(selectedFilter);
+    const cssFilter = activeFilter.cssFilter;
 
     const captureTimer = window.setInterval(() => {
+      const local = videoRef.current;
+      const remote = remoteVideoRef.current;
+      if (hasAccessories && (!hasCameraFrame(local) || (isDuo && !hasCameraFrame(remote)))) {
+        window.clearInterval(captureTimer);
+        setRecordedCount(0);
+        setIsRecording(false);
+        setRecordingError('Kamera terputus saat merekam. Tunggu preview kamera kembali, lalu rekam ulang.');
+        return;
+      }
       const idx = collected.length;
+      recordingPreviewFrame.current = idx;
       const emoji =
         mode === 'duo'
           ? POSE_SEQUENCE_EMOJIS_DUO[Math.floor(idx / 12) % POSE_SEQUENCE_EMOJIS_DUO.length]
           : POSE_SEQUENCE_EMOJIS_SOLO[Math.floor(idx / 6) % POSE_SEQUENCE_EMOJIS_SOLO.length];
 
       const frameUrl = captureFlipbookFrameDataUrl({
-        videoEl: useSimulation ? null : videoRef.current,
-        guestVideoEl: useSimulation ? null : remoteVideoRef.current,
+        videoEl: useSimulation ? null : local,
+        guestVideoEl: useSimulation ? null : remote,
         mode,
         fallbackEmoji: emoji,
         frameIndex: idx,
@@ -288,6 +377,12 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
         cssFilter,
         overlayId,
         mirror,
+        localOnRight: guestOnThisDevice,
+        accessories: {
+          local: { id: localAccessory, face: localFace.current },
+          remote: { id: remoteAccessory, face: remoteFace.current },
+          timeMs: performance.now(),
+        },
         paperColor: activePreset.paperColor,
         accentHex: activePreset.accentHex,
         width: CAPTURE_WIDTH,
@@ -311,8 +406,8 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
     return () => window.clearInterval(captureTimer);
   }, [isRecording]);
 
-  const ensureFramesReady = (): string[] => {
-    if (capturedFrames.length > 0) return capturedFrames;
+  const playbackFrames = useMemo(() => {
+    if (step < 5 || capturedFrames.length > 0) return capturedFrames;
     const cssFilter = getCssFilterById(selectedFilter);
     return Array.from({ length: TOTAL_FRAMES }).map((_, idx) =>
       captureFlipbookFrameDataUrl({
@@ -333,18 +428,14 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
         height: CAPTURE_HEIGHT,
       })
     );
-  };
-
-  const handleSelectPreset = (nextId: FlipbookPresetId) => {
-    setPresetId(nextId);
-    const nextPreset = FLIPBOOK_PRESETS.find((p) => p.id === nextId);
-    if (nextPreset) {
-      onChangeFilter(nextPreset.recommendedFilter);
-    }
-  };
+  }, [step, capturedFrames, selectedFilter, mode, overlayId, mirror, activePreset]);
 
   const handleCopyInvite = (type: 'code' | 'link') => {
-    const value = type === 'code' ? roomCode : shareInviteUrl;
+    if (!roomCode) return;
+    const inviteUrl = new URL(window.location.pathname, window.location.origin);
+    inviteUrl.searchParams.set('room', roomCode);
+    inviteUrl.searchParams.set('flow', 'flipbook');
+    const value = type === 'code' ? roomCode : inviteUrl.href;
     navigator.clipboard?.writeText(value).catch(() => { });
     setCopiedType(type);
     window.setTimeout(() => setCopiedType('none'), 2000);
@@ -380,7 +471,10 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
   };
 
   const handleStartCountdownAndRecord = () => {
-    if (isRecording || countdown !== null) return;
+    if (takeActive || accessorySetupBlocked) return;
+    setTakeSettings({ filter: selectedFilter, local: selectedLocalAccessory, remote: selectedRemoteAccessory });
+    recordingPreviewFrame.current = 0;
+    setRecordingError(null);
     setCapturedFrames([]);
     setIsPlaying(false);
     setGifStatus('idle');
@@ -388,12 +482,14 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
     setMp4Status('idle');
 
     setCountdown(3);
-    window.setTimeout(() => setCountdown(2), 750);
-    window.setTimeout(() => setCountdown(1), 1500);
-    window.setTimeout(() => {
-      setCountdown(null);
-      setIsRecording(true);
-    }, 2250);
+    countdownTimers.current = [
+      window.setTimeout(() => setCountdown(2), 750),
+      window.setTimeout(() => setCountdown(1), 1500),
+      window.setTimeout(() => {
+        setCountdown(null);
+        setIsRecording(true);
+      }, 2250),
+    ];
   };
 
   const handleRetakeFromStep5 = () => {
@@ -418,7 +514,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
     }
 
     try {
-      const rawPages = ensureFramesReady();
+      const rawPages = playbackFrames;
       setGifProgress(5);
 
       const { allFrames, frameDelaysMs } = await buildFlipbookGifSequenceWithCover({
@@ -450,7 +546,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
       return;
     }
     try {
-      const rawPages = ensureFramesReady();
+      const rawPages = playbackFrames;
       const { blob, ext } = await recordCanvasVideoBlob(rawPages, 12);
       setLastVideoExt(ext);
       triggerFileDownload(blob, `momentos-flipbook-${presetId}.${ext}`);
@@ -471,7 +567,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
   const isDarkPaper = activePreset.id === 'neon-disco';
 
   return (
-    <div className="page-stack" style={{ maxWidth: 1060, margin: '0 auto' }}>
+    <div className="page-stack" style={{ maxWidth: step === 4 ? 1440 : 1060, margin: '0 auto' }}>
       <section>
         {/* 6-Step Progress Bar */}
         <div
@@ -495,6 +591,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                   fontWeight: 700,
                 }}
                 onClick={() => setStep(st.step)}
+                disabled={takeActive}
               >
                 {st.num}. {st.label}
               </button>
@@ -530,7 +627,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                   01 · Persiapan
                 </span>
                 <h2 className="heading-h3" style={{ marginBottom: 6 }}>
-                  Pilih Mode, Tema &amp; Efek
+                  Pilih mode dan tema sampul
                 </h2>
                 <p className="text-muted" style={{ fontSize: '0.86rem' }}>
                   Bisa sendiri (Solo) atau berdua jarak jauh (Duo). Pilih sampul buku, efek
@@ -547,7 +644,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                 </h2>
                 <p className="text-muted" style={{ fontSize: '0.86rem' }}>
                   Kamera mencuplik <strong>60 frame selama 10 detik (6 FPS)</strong> pada
-                  ukuran <code>420 × 315 px</code>. Ikuti panduan pose atau bergerak bebas!
+                  ukuran <code>{CAPTURE_WIDTH} &times; {CAPTURE_HEIGHT} px</code>. Ikuti panduan pose atau bergerak bebas!
                 </p>
               </div>
 
@@ -565,6 +662,10 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
               </div>
             </div>
 
+            <EffectDemoPanel selected={selectedDemo} onSelect={setDemoId} />
+
+            <CameraAccessoryDemo />
+
             {/* Interactive Effect Showcase + Live Animated Mini Flipbook Preview */}
             <div className="flipbook-workspace-grid">
               {/* Left: Clickable Effect Cards */}
@@ -574,13 +675,13 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                     KLIK CONTOH EFEK INTERAKTIF (6 EFEK)
                   </div>
                   <p className="text-muted" style={{ fontSize: '0.8rem' }}>
-                    Pilih efek untuk melihat animasi partikelnya bekerja di buku flipbook sebelah kanan:
+                  Pilih overlay untuk melihat animasi partikelnya di buku Flipbook.
                   </p>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {FLIPBOOK_OVERLAY_EFFECTS.map((ov) => {
-                    const isSelected = overlayId === ov.id;
+                    const isSelected = showcaseOverlayId === ov.id;
                     return (
                       <button
                         key={ov.id}
@@ -596,7 +697,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                           gap: 4,
                           cursor: 'pointer',
                         }}
-                        onClick={() => setOverlayId(ov.id)}
+                        onClick={() => setShowcaseOverlayId(ov.id)}
                       >
                         <div
                           style={{
@@ -672,7 +773,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                 >
                   <span>▶ LIVE PREVIEW EFEK:</span>
                   <span>
-                    {activeOverlay.icon} {activeOverlay.label}
+                    {showcaseOverlay.icon} {showcaseOverlay.label}
                   </span>
                 </div>
 
@@ -682,7 +783,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                     position: 'relative',
                     width: '100%',
                     maxWidth: 420,
-                    aspectRatio: '4 / 3',
+                    aspectRatio: CAPTURE_ASPECT_RATIO,
                     background: activePreset.paperColor,
                     border: `2.5px solid ${activePreset.binderColor}`,
                     borderRadius: 18,
@@ -750,7 +851,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                       borderRadius: 12,
                       border: `1.5px solid ${activePreset.accentHex}`,
                       background:
-                        overlayId === 'disco-sparkles'
+                        showcaseOverlayId === 'disco-sparkles'
                           ? showcaseTick % 2 === 0
                             ? '#FDF2F8'
                             : '#EFF6FF'
@@ -774,7 +875,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                     </div>
 
                     {/* Live Effect Particles Overlay */}
-                    {overlayId === 'confetti-burst' &&
+                    {showcaseOverlayId === 'confetti-burst' &&
                       ['🎊', '✨', '🎉', '🌸', '⭐'].map((ic, idx) => (
                         <span
                           key={idx}
@@ -790,7 +891,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                         </span>
                       ))}
 
-                    {overlayId === 'floating-hearts' &&
+                    {showcaseOverlayId === 'floating-hearts' &&
                       ['💖', '🫶', '💕', '🌸'].map((ic, idx) => (
                         <span
                           key={idx}
@@ -806,7 +907,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                         </span>
                       ))}
 
-                    {overlayId === 'disco-sparkles' && (
+                    {showcaseOverlayId === 'disco-sparkles' && (
                       <span
                         style={{
                           position: 'absolute',
@@ -820,7 +921,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                       </span>
                     )}
 
-                    {overlayId === 'comic-pop' && (
+                    {showcaseOverlayId === 'comic-pop' && (
                       <div
                         style={{
                           position: 'absolute',
@@ -839,7 +940,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                       </div>
                     )}
 
-                    {overlayId === 'film-grain' && (
+                    {showcaseOverlayId === 'film-grain' && (
                       <div
                         style={{
                           position: 'absolute',
@@ -865,7 +966,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                         fontWeight: 700,
                       }}
                     >
-                      420×315 · 6 FPS → 12 FPS GIF
+                      {CAPTURE_WIDTH} &times; {CAPTURE_HEIGHT} · 6 FPS → 12 FPS GIF
                     </div>
                   </div>
 
@@ -878,7 +979,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                       fontWeight: 700,
                     }}
                   >
-                    <span>{activeOverlay.description}</span>
+                    <span>{showcaseOverlay.description}</span>
                     <span>MOMENTOS • 2026</span>
                   </div>
                 </div>
@@ -994,7 +1095,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                     undangan di bawah kepada temanmu:
                   </p>
 
-                  {mode === 'duo' && (
+                  {roomCode && (
                     <div
                       style={{
                         padding: '12px 14px',
@@ -1050,7 +1151,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {mode !== 'duo' ? (
+                  {!roomCode ? (
                     <button
                       type="button"
                       className="btn btn-secondary-pop"
@@ -1069,7 +1170,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                     >
-                      Lanjut Pilih Tema &amp; Efek →
+                      Lanjut Pilih Tema →
                     </button>
                   )}
                 </div>
@@ -1150,14 +1251,14 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
         )}
 
         {/* =====================================================================
-            LANGKAH 3: PILIH TEMA BUKU (8), EFEK INTERAKTIF & FILTER WARNA (8)
+            LANGKAH 3: PILIH TEMA SAMPUL
            ===================================================================== */}
         {step === 3 && (
           <div>
             <div className="page-intro" style={{ marginBottom: 22 }}>
-              <span className="eyebrow-text">Langkah 03 · Kustomisasi Buku &amp; Kamera</span>
+              <span className="eyebrow-text">Langkah 03</span>
               <h1 className="heading-h1" style={{ marginBottom: 8 }}>
-                Pilih <span className="font-upright-serif">Tema Sampul</span>, Efek &amp; Filter.
+                Pilih <span className="font-upright-serif">Tema Sampul</span>
               </h1>
               <p className="text-muted">
                 Tema sampul buku ini akan menjadi cover pembuka pada file <code>.GIF</code> yang
@@ -1165,46 +1266,12 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
               </p>
             </div>
 
-            {isOverlayIncompatible && (
-              <div
-                className="clean-card surface-light"
-                style={{
-                  background: '#FEF3C7',
-                  borderColor: '#D97706',
-                  marginBottom: 20,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: 12,
-                }}
-              >
-                <div>
-                  <strong style={{ color: '#92400E', display: 'block', marginBottom: 2 }}>
-                    ⚠️ Efek "{activeOverlay.label}" kurang selaras dengan tema "{activePreset.name}"
-                  </strong>
-                  <span style={{ fontSize: '0.82rem', color: '#78350F' }}>
-                    Disarankan memakai Clean Frame agar tekstur sampul &amp; kertas tetap jelas.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary-pop"
-                  style={{ minHeight: 36, padding: '4px 14px', fontSize: '0.8rem' }}
-                  onClick={() => setOverlayId('none')}
-                >
-                  Sesuaikan Otomatis (Clean Frame)
-                </button>
-              </div>
-            )}
-
             <div className="flipbook-workspace-grid">
-              {/* Left: 8 Book Themes, 6 Effects, 8 Filters */}
+              {/* Pilihan tema sampul */}
               <div className="clean-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {/* 1. 8 Tema Sampul Buku */}
                 <div>
                   <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 8 }}>
-                    1. PILIH TEMA SAMPUL BUKU (8 PRESET)
+                    Tema sampul
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {FLIPBOOK_PRESETS.map((preset) => (
@@ -1222,7 +1289,8 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                           textAlign: 'left',
                         }}
                         title={preset.subtitle}
-                        onClick={() => handleSelectPreset(preset.id)}
+                        aria-pressed={presetId === preset.id}
+                        onClick={() => setPresetId(preset.id)}
                       >
                         <span
                           style={{
@@ -1240,95 +1308,6 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                   </div>
                   <div className="text-muted" style={{ fontSize: '0.76rem', marginTop: 6 }}>
                     {activePreset.subtitle}
-                  </div>
-                </div>
-
-                {/* 2. Efek Interaktif */}
-                <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 8 }}>
-                    2. EFEK INTERAKTIF SAAT REKAMAN
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {FLIPBOOK_OVERLAY_EFFECTS.map((ov) => {
-                      const clash = activePreset.incompatibleOverlays.includes(ov.id);
-                      return (
-                        <button
-                          key={ov.id}
-                          type="button"
-                          className={`btn btn-lift ${overlayId === ov.id ? 'active-pill' : ''}`}
-                          style={{
-                            minHeight: 36,
-                            padding: '4px 12px',
-                            fontSize: '0.76rem',
-                            opacity: clash ? 0.75 : 1,
-                          }}
-                          onClick={() => setOverlayId(ov.id)}
-                        >
-                          {ov.icon} {ov.label} {clash ? '⚠️' : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 3. 8 Filter Warna */}
-                <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 8 }}>
-                    3. FILTER WARNA KAMERA (8 PRESET)
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {PHOTO_FILTER_PRESETS.map((flt) => (
-                      <button
-                        key={flt.id}
-                        type="button"
-                        className={`btn btn-lift ${selectedFilter === flt.id ? 'active-pill' : ''}`}
-                        style={{
-                          minHeight: 34,
-                          padding: '4px 11px',
-                          fontSize: '0.76rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                        onClick={() => onChangeFilter(flt.id)}
-                      >
-                        <span
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            background: flt.previewBg,
-                            border: '1px solid rgba(0,0,0,0.3)',
-                          }}
-                        />
-                        {flt.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 4. Gaya Panduan Pose */}
-                <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 8 }}>
-                    4. PANDUAN ABA-ABA POSE
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    <button
-                      type="button"
-                      className={`btn btn-lift ${poseMode === 'guided' ? 'active-pill' : ''}`}
-                      style={{ minHeight: 38, fontSize: '0.78rem' }}
-                      onClick={() => setPoseMode('guided')}
-                    >
-                      🧭 Guided (3 Aba-aba Pose)
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-lift ${poseMode === 'freestyle' ? 'active-pill' : ''}`}
-                      style={{ minHeight: 38, fontSize: '0.78rem' }}
-                      onClick={() => setPoseMode('freestyle')}
-                    >
-                      🕺 Freestyle Bebas
-                    </button>
                   </div>
                 </div>
 
@@ -1385,28 +1364,16 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                   />
                 ) : null}
 
-                <div
-                  style={{
-                    fontSize: '0.78rem',
-                    color: '#52525B',
-                    textAlign: 'center',
-                    maxWidth: 380,
-                  }}
-                >
-                  Tema: <strong>{activePreset.name}</strong> · Efek:{' '}
-                  <strong>{activeOverlay.label}</strong> · Filter:{' '}
-                  <strong>{activeFilter.name}</strong>
-                </div>
               </div>
             </div>
           </div>
         )}
 
         {/* =====================================================================
-            LANGKAH 4: TAKE FLIPBOOK (60 FRAME DALAM 10 DETIK · 6 FPS · 420x315)
+            LANGKAH 4: TAKE FLIPBOOK (60 FRAME DALAM 10 DETIK · 6 FPS · 16:9)
            ===================================================================== */}
         {step === 4 && (
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+          <div className="flipbook-camera-screen">
             <div className="page-intro" style={{ marginBottom: 18 }}>
               <span className="eyebrow-text">
                 Langkah 04 · Rekaman {TOTAL_FRAMES} Frame (10 Detik · {CAPTURE_FPS} FPS · {CAPTURE_WIDTH}×{CAPTURE_HEIGHT} px)
@@ -1421,7 +1388,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
             </div>
 
             {/* Duo Room Invite Bar if Mode Duo is active */}
-            {mode === 'duo' && (
+            {roomCode && (
               <div
                 className="clean-card surface-light"
                 style={{
@@ -1472,247 +1439,369 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                 }}
               >
                 <strong>Info Kamera:</strong> {cameraError}
+                {useSimulation && (
+                  <button type="button" className="btn btn-lift" disabled={takeActive}
+                    style={{ marginLeft: 8, minHeight: 44 }} onClick={() => setUseSimulation(false)}>
+                    Coba kamera lagi
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Centered Clean Camera Stage (420x315 4:3 Aspect Ratio) */}
-            <div
-              className="clean-card surface-light"
-              style={{
-                background: '#FFFFFF',
-                padding: 22,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 16,
-              }}
-            >
-              {/* Progress Header Bar */}
-              <div
-                style={{
-                  width: '100%',
-                  maxWidth: 520,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '0.8rem',
-                  fontWeight: 800,
-                  color: '#18181B',
-                }}
-              >
-                <span>
-                  {activePreset.name} · {activeOverlay.icon} {activeOverlay.label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'monospace',
-                    padding: '3px 10px',
-                    borderRadius: 999,
-                    background: isRecording ? '#BC4374' : '#FAF7F2',
-                    color: isRecording ? '#FFFFFF' : '#18181B',
-                    border: '1.5px solid #18181B',
-                  }}
-                >
-                  {recordedCount}/{TOTAL_FRAMES} Frame (
-                  {((recordedCount / TOTAL_FRAMES) * 10).toFixed(1)}s / 10.0s)
-                </span>
-              </div>
-
-              {/* Progress Bar Track */}
-              <div
-                style={{
-                  width: '100%',
-                  maxWidth: 520,
-                  height: 10,
-                  borderRadius: 999,
-                  background: '#E4E4E7',
-                  border: '1.5px solid #18181B',
-                  overflow: 'hidden',
-                }}
-              >
+            <div className="flipbook-camera-layout">
+              <div className="flipbook-camera-stage">
+                {/* Progress Header Bar */}
                 <div
                   style={{
-                    width: `${Math.round((recordedCount / TOTAL_FRAMES) * 100)}%`,
-                    height: '100%',
-                    background: '#BC4374',
-                    transition: 'width 0.14s linear',
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    alignItems: 'center',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
                   }}
-                />
-              </div>
-
-              {/* Clean 4:3 Camera Viewport (420x315 capture proportion) */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  maxWidth: 520,
-                  aspectRatio: '4 / 3',
-                  borderRadius: 18,
-                  border: '2.5px solid #18181B',
-                  background: useSimulation ? activePreset.paperColor : '#09090B',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '6px 6px 0px #18181B',
-                }}
-              >
-                {countdown !== null && (
-                  <div
+                >
+                  <span>
+                    {activePreset.name} · {activeOverlay.icon} {activeOverlay.label}
+                  </span>
+                  <span
                     style={{
-                      position: 'absolute',
-                      inset: 0,
-                      zIndex: 30,
-                      background: 'rgba(24,24,27,0.48)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#FFFFFF',
+                      fontFamily: 'monospace',
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      background: isRecording ? '#BC4374' : '#FAF7F2',
+                      color: isRecording ? '#FFFFFF' : '#18181B',
+                      border: '1.5px solid #18181B',
                     }}
                   >
+                    {recordedCount}/{TOTAL_FRAMES} Frame (
+                    {((recordedCount / TOTAL_FRAMES) * 10).toFixed(1)}s / 10.0s)
+                  </span>
+                </div>
+
+                {/* Progress Bar Track */}
+                <div
+                  style={{
+                    width: '100%',
+                    height: 10,
+                    borderRadius: 999,
+                    background: '#E4E4E7',
+                    border: '1.5px solid #18181B',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.round((recordedCount / TOTAL_FRAMES) * 100)}%`,
+                      height: '100%',
+                      background: '#BC4374',
+                      transition: 'width 0.14s linear',
+                    }}
+                  />
+                </div>
+
+                {/* The live viewport matches the recorded frame. */}
+                <div
+                  className="flipbook-camera-viewport"
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    aspectRatio: CAPTURE_ASPECT_RATIO,
+                    borderRadius: 18,
+                    outline: '2.5px solid #18181B',
+                    background: useSimulation ? activePreset.paperColor : '#09090B',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '6px 6px 0px #18181B',
+                  }}
+                >
+                  {countdown !== null && (
                     <div
                       style={{
-                        fontFamily: 'var(--primitive-font-heading)',
-                        fontSize: '4.8rem',
-                        fontWeight: 800,
-                        lineHeight: 1,
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 30,
+                        background: 'rgba(24,24,27,0.48)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#FFFFFF',
                       }}
                     >
-                      {countdown}
+                      <div
+                        style={{
+                          fontFamily: 'var(--primitive-font-heading)',
+                          fontSize: '4.8rem',
+                          fontWeight: 800,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {countdown}
+                      </div>
+                      <div style={{ fontWeight: 700, marginTop: 8 }}>
+                        Bersiap! 60 Frame dalam 10 Detik...
+                      </div>
                     </div>
-                    <div style={{ fontWeight: 700, marginTop: 8 }}>
-                      Bersiap! 60 Frame dalam 10 Detik...
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {!useSimulation ? (
-                  mode === 'duo' ? (
-                    <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                  {!useSimulation ? (
+                    mode === 'duo' ? (
+                      <div style={{ display: 'flex', width: '100%', height: '100%' }}>
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          aria-label={guestOnThisDevice ? 'Kamera Guest' : 'Kamera Host'}
+                          onPlaying={() => setLocalPlaying(true)}
+                          onEmptied={() => setLocalPlaying(false)}
+                          style={{
+                            flex: '0 0 50%',
+                            minWidth: 0,
+                            height: '100%',
+                            order: guestOnThisDevice ? 1 : 0,
+                            objectFit: 'cover',
+                            transform: mirror ? 'scaleX(-1)' : 'none',
+                            filter: activeFilter.cssFilter,
+                          }}
+                        />
+                        <video
+                          ref={remoteVideoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          aria-label={guestOnThisDevice ? 'Kamera Host' : 'Kamera Guest'}
+                          onPlaying={() => setRemotePlaying(true)}
+                          onEmptied={() => setRemotePlaying(false)}
+                          style={{
+                            flex: '0 0 50%',
+                            minWidth: 0,
+                            height: '100%',
+                            order: guestOnThisDevice ? 0 : 1,
+                            objectFit: 'cover',
+                            filter: activeFilter.cssFilter,
+                            background: '#18181B',
+                          }}
+                        />
+                      </div>
+                    ) : (
                       <video
                         ref={videoRef}
                         autoPlay
                         playsInline
                         muted
+                        aria-label="Kamera kamu"
+                        onPlaying={() => setLocalPlaying(true)}
+                        onEmptied={() => setLocalPlaying(false)}
                         style={{
-                          width: '50%',
+                          width: '100%',
                           height: '100%',
                           objectFit: 'cover',
                           transform: mirror ? 'scaleX(-1)' : 'none',
                           filter: activeFilter.cssFilter,
                         }}
                       />
-                      <video
-                        ref={remoteVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        style={{
-                          width: '50%',
-                          height: '100%',
-                          objectFit: 'cover',
-                          borderLeft: '2px solid rgba(255,255,255,0.85)',
-                          filter: activeFilter.cssFilter,
-                          background: '#18181B',
-                        }}
-                      />
-                    </div>
+                    )
                   ) : (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
+                    <div
                       style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        transform: mirror ? 'scaleX(-1)' : 'none',
+                        fontSize: '4rem',
                         filter: activeFilter.cssFilter,
                       }}
-                    />
-                  )
-                ) : (
+                    >
+                      {poseEmoji}
+                    </div>
+                  )}
+
+                  {isDuo && !useSimulation && <span className="camera-duo-divider" aria-hidden="true" />}
+                  {showPreviewEffects && <canvas ref={previewEffectsRef} className="flipbook-preview-effects"
+                    width={CAPTURE_WIDTH} height={CAPTURE_HEIGHT} aria-hidden="true" />}
+
+                  {/* Guided Pose Prompt Pill at Bottom of Camera */}
                   <div
                     style={{
-                      fontSize: '4rem',
-                      filter: activeFilter.cssFilter,
+                      position: 'absolute',
+                      bottom: 14,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      padding: '6px 16px',
+                      borderRadius: 999,
+                      background: 'rgba(255,255,255,0.92)',
+                      color: '#18181B',
+                      border: '1.5px solid #18181B',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      whiteSpace: 'nowrap',
+                      zIndex: 20,
                     }}
                   >
-                    {poseEmoji}
+                    {poseMode === 'guided'
+                      ? activePreset.guidedPrompts[currentBeat]
+                      : `Freestyle Beat #${currentBeat + 1} · Bergerak Ekspresif!`}
                   </div>
+                </div>
+
+                {hasAccessories && (
+                  <p className="text-muted" role="status" style={{ margin: 0, fontSize: '0.82rem' }}>
+                    {useSimulation ? 'Aksesori memerlukan kamera aktif. Pilih Tanpa Aksesori untuk merekam simulasi.'
+                      : trackingUnavailable ? 'Pelacak aksesori tidak tersedia. Pilih Tanpa Aksesori untuk melanjutkan, atau muat ulang halaman untuk mencoba lagi.'
+                      : waitingForCameras ? (isDuo && localPlaying ? 'Menunggu kamera peserta lain.' : 'Menunggu kamera kamu.')
+                      : trackingLoading ? 'Menyiapkan pelacakan aksesori.'
+                      : [localTracking, remoteTracking].includes('searching') ? 'Arahkan wajah yang memakai aksesori ke kamera.'
+                      : 'Pelacakan aksesori aktif.'}
+                  </p>
                 )}
 
-                {/* Guided Pose Prompt Pill at Bottom of Camera */}
+                {recordingError && <p className="text-muted" role="alert" style={{ margin: 0 }}>{recordingError}</p>}
+
+                <fieldset className="flipbook-camera-accessories" aria-label="Aksesori Kamera" disabled={takeActive}>
+                  <h2>Aksesori</h2>
+                  {isDuo ? (
+                    <div className="flipbook-duo-accessories">
+                      <div>
+                        <h3>Host</h3>
+                        <CameraAccessoryRail label="Aksesori Host" selected={duoAccessories?.host ?? 'none'}
+                          disabled={!canSetDuoAccessories} onSelect={(id) => {
+                            realtimeClient.syncConfig({ flipbookAccessory: { role: 'host', id } });
+                          }} />
+                      </div>
+                      <div>
+                        <h3>Guest</h3>
+                        <CameraAccessoryRail label="Aksesori Guest" selected={duoAccessories?.guest ?? 'none'}
+                          disabled={!canSetDuoAccessories} onSelect={(id) => {
+                            realtimeClient.syncConfig({ flipbookAccessory: { role: 'guest', id } });
+                          }} />
+                      </div>
+                      {!canSetDuoAccessories && (
+                        <p className="text-muted flipbook-camera-control-note">
+                          {duoRoom ? 'Aksesori Duo diatur oleh Host.' : 'Buat atau gabung room Duo untuk memakai aksesori.'}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <CameraAccessoryRail label="Aksesori kamu" selected={soloAccessory} onSelect={setSoloAccessory} />
+                  )}
+                </fieldset>
+
+                {/* Camera actions */}
                 <div
                   style={{
-                    position: 'absolute',
-                    bottom: 14,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    padding: '6px 16px',
-                    borderRadius: 999,
-                    background: 'rgba(255,255,255,0.92)',
-                    color: '#18181B',
-                    border: '1.5px solid #18181B',
-                    fontSize: '0.82rem',
-                    fontWeight: 800,
-                    whiteSpace: 'nowrap',
-                    zIndex: 20,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    width: '100%',
                   }}
                 >
-                  {poseMode === 'guided'
-                    ? activePreset.guidedPrompts[currentBeat]
-                    : `Freestyle Beat #${currentBeat + 1} · Bergerak Ekspresif!`}
+                  <button
+                    type="button"
+                    className="btn btn-lift"
+                    style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
+                    disabled={takeActive}
+                    onClick={() => setstepOrMirror()}
+                  >
+                    🪞 {mirror ? 'Mirror ON' : 'Mirror OFF'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary-pop"
+                    style={{ minHeight: 50, padding: '10px 28px', fontSize: '0.95rem' }}
+                    disabled={takeActive || accessorySetupBlocked}
+                    onClick={handleStartCountdownAndRecord}
+                  >
+                    {isRecording
+                      ? `🔴 Merekam ${recordedCount}/${TOTAL_FRAMES} Frame...`
+                      : countdown !== null
+                        ? `⏳ Mulai dalam ${countdown}...`
+                        : '🎬 Mulai Take Flipbook (60 Frame · 10 Detik)'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-lift"
+                    style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.82rem' }}
+                    disabled={takeActive}
+                    onClick={() => {
+                      setStep(3);
+                      window.scrollTo({ top: 0 });
+                    }}
+                  >
+                    ← Tema Sampul
+                  </button>
                 </div>
               </div>
-
-              {/* Clean Camera Controls: Only Mirror + Record CTA (No Webcam|Simulasi toggle!) */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  width: '100%',
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-lift"
-                  style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
-                  disabled={isRecording}
-                  onClick={() => setstepOrMirror()}
-                >
-                  🪞 {mirror ? 'Mirror ON' : 'Mirror OFF'}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-primary-pop"
-                  style={{ minHeight: 50, padding: '10px 28px', fontSize: '0.95rem' }}
-                  disabled={isRecording || countdown !== null}
-                  onClick={handleStartCountdownAndRecord}
-                >
-                  {isRecording
-                    ? `🔴 Merekam ${recordedCount}/${TOTAL_FRAMES} Frame...`
-                    : countdown !== null
-                      ? `⏳ Mulai dalam ${countdown}...`
-                      : '🎬 Mulai Take Flipbook (60 Frame · 10 Detik)'}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-lift"
-                  style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.82rem' }}
-                  disabled={isRecording}
-                  onClick={() => setStep(3)}
-                >
-                  ← Tema &amp; Filter
-                </button>
-              </div>
+              <fieldset className="flipbook-choice-panel flipbook-filter-panel" aria-label="Filter warna kamera"
+                disabled={takeActive || guestOnThisDevice}>
+                <h2>Filter</h2>
+                <div className="flipbook-side-choices">
+                  {PHOTO_FILTER_PRESETS.map((filter) => (
+                    <CameraChoice key={filter.id} label={filter.name} cssFilter={filter.cssFilter}
+                      selected={cameraFilter === filter.id} onSelect={() => onChangeFilter(filter.id)} />
+                  ))}
+                </div>
+                {guestOnThisDevice && <p className="text-muted flipbook-camera-control-note">Filter Duo diatur oleh Host.</p>}
+              </fieldset>
+              <fieldset className="flipbook-choice-panel flipbook-overlay-panel" aria-label="Overlay rekaman" disabled={takeActive}>
+                <h2>Overlay</h2>
+                <div className="flipbook-side-choices">
+                  {FLIPBOOK_OVERLAY_EFFECTS.map((overlay) => (
+                    <CameraChoice key={overlay.id} label={overlay.label} overlay={overlay.id}
+                      selected={overlayId === overlay.id} description={overlay.description}
+                      onSelect={() => setOverlayId(overlay.id)} />
+                  ))}
+                </div>
+                {isOverlayIncompatible && (
+                  <div className="flipbook-overlay-notice">
+                    <span>{activeOverlay.label} kurang selaras dengan {activePreset.name}.</span>
+                    <button type="button" className="btn btn-lift" onClick={() => setOverlayId('none')}>Pakai Clean Frame</button>
+                  </div>
+                )}
+              </fieldset>
+              <fieldset className="flipbook-camera-extra" aria-label="Pose dan demo gestur" disabled={takeActive}>
+                <div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 8 }}>
+                    Panduan pose
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <button
+                      type="button"
+                      className={`btn btn-lift ${poseMode === 'guided' ? 'active-pill' : ''}`}
+                      style={{ minHeight: 44, fontSize: '0.78rem' }}
+                      aria-pressed={poseMode === 'guided'}
+                      onClick={() => setPoseMode('guided')}
+                    >
+                      🧭 Guided (3 Aba-aba Pose)
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-lift ${poseMode === 'freestyle' ? 'active-pill' : ''}`}
+                      style={{ minHeight: 44, fontSize: '0.78rem' }}
+                      aria-pressed={poseMode === 'freestyle'}
+                      onClick={() => setPoseMode('freestyle')}
+                    >
+                      🕺 Freestyle Bebas
+                    </button>
+                  </div>
+                </div>
+                <div className="flipbook-camera-gesture">
+                  <h2 className="heading-h3">Demo efek gestur</h2>
+                  <EffectDemoPicker selected={selectedDemo} onSelect={setDemoId} />
+                  <button type="button" className="btn btn-lift" aria-expanded={showCameraDemo}
+                    aria-controls="flipbook-camera-demo" onClick={() => setShowCameraDemo((show) => !show)}>
+                    {showCameraDemo ? 'Tutup demo' : `Coba demo ${selectedDemo.name}`}
+                  </button>
+                  <div id="flipbook-camera-demo" hidden={!showCameraDemo}>
+                    {showCameraDemo && !takeActive && <GestureDemo key={selectedDemo.id} effect={selectedDemo} />}
+                  </div>
+                </div>
+              </fieldset>
             </div>
           </div>
         )}
@@ -1810,7 +1899,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                   <div
                     style={{
                       width: '100%',
-                      aspectRatio: '4 / 3',
+                      aspectRatio: CAPTURE_ASPECT_RATIO,
                       borderRadius: 12,
                       border: `1.5px solid ${activePreset.accentHex}`,
                       background: '#FFFFFF',
@@ -1820,9 +1909,9 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                       justifyContent: 'center',
                     }}
                   >
-                    {ensureFramesReady()[currentFrame] ? (
+                    {playbackFrames[currentFrame] ? (
                       <img
-                        src={ensureFramesReady()[currentFrame]}
+                        src={playbackFrames[currentFrame]}
                         alt={`Halaman ${currentFrame + 1}`}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
@@ -2042,15 +2131,15 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
                     <div
                       style={{
                         width: '100%',
-                        aspectRatio: '4 / 3',
+                        aspectRatio: CAPTURE_ASPECT_RATIO,
                         borderRadius: 10,
                         overflow: 'hidden',
                         border: `1.5px solid ${activePreset.accentHex}`,
                       }}
                     >
-                      {ensureFramesReady()[currentFrame] && (
+                      {playbackFrames[currentFrame] && (
                         <img
-                          src={ensureFramesReady()[currentFrame]}
+                          src={playbackFrames[currentFrame]}
                           alt={`Frame ${currentFrame + 1}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />

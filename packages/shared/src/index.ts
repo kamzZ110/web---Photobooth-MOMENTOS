@@ -237,6 +237,16 @@ export type FlipbookPresetId =
 
 export type FlipbookPoseMode = 'guided' | 'freestyle';
 
+export const CAMERA_ACCESSORY_IDS = ['none', 'santa-hat', 'cat-ears', 'star-glasses', 'clown-nose'] as const;
+export type CameraAccessoryId = (typeof CAMERA_ACCESSORY_IDS)[number];
+
+export function isCameraAccessoryId(value: unknown): value is CameraAccessoryId {
+  return CAMERA_ACCESSORY_IDS.some((id) => id === value);
+}
+
+export type DuoCameraAccessories = Record<ParticipantRole, CameraAccessoryId>;
+export type DuoCameraAccessoryChange = { role: ParticipantRole; id: CameraAccessoryId };
+
 export type FlipbookEffectOverlayId =
   | 'none'
   | 'confetti-burst'
@@ -260,6 +270,30 @@ export const FLIPBOOK_OVERLAY_EFFECTS: FlipbookOverlayEffect[] = [
   { id: 'comic-pop', label: 'Comic Pop-Art', icon: '💥', description: 'Aksen garis kecepatan & bubble ekspresi.' },
   { id: 'film-grain', label: 'Analog Dust & Grain', icon: '📽️', description: 'Serat film 8mm & bingkai bergetar halus.' },
 ];
+
+export interface ClassicCameraEffects {
+  overlay: FlipbookEffectOverlayId;
+  accessories: DuoCameraAccessories;
+}
+
+export interface ClassicCameraEffectChange {
+  overlay?: FlipbookEffectOverlayId;
+  accessory?: DuoCameraAccessoryChange;
+}
+
+export const DEFAULT_CLASSIC_CAMERA_EFFECTS: ClassicCameraEffects = {
+  overlay: 'none',
+  accessories: { host: 'none', guest: 'none' },
+};
+
+export function updateClassicCameraEffects(current: ClassicCameraEffects, change: ClassicCameraEffectChange): ClassicCameraEffects {
+  return {
+    overlay: change.overlay ?? current.overlay,
+    accessories: change.accessory
+      ? { ...current.accessories, [change.accessory.role]: change.accessory.id }
+      : current.accessories,
+  };
+}
 
 export interface FlipbookPreset {
   id: FlipbookPresetId;
@@ -491,6 +525,8 @@ export interface AuthoritativeRoomSnapshot {
   idleDestroyAt: number | null;
   takeCount: number;
   selectedFilter: PhotoFilterId;
+  classicCameraEffects?: ClassicCameraEffects;
+  flipbookAccessories?: DuoCameraAccessories;
   layout: TemplateLayoutId;
   retakesRemaining: number;
   participants: RoomParticipant[];
@@ -535,6 +571,8 @@ export type ClientToServerMessage =
       type: 'session:config';
       takeCount?: number;
       selectedFilter?: PhotoFilterId;
+      classicCameraEffect?: ClassicCameraEffectChange;
+      flipbookAccessory?: DuoCameraAccessoryChange;
       layout?: TemplateLayoutId;
       phase?: RoomSessionPhase;
     }

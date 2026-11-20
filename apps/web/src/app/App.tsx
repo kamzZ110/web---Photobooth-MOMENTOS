@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_STICKER_LIBRARY,
   type BoothMode,
@@ -137,6 +137,7 @@ export const App: React.FC = () => {
   const [realtimeState, setRealtimeState] = useState<RealtimeClientState>(() =>
     realtimeClient.getState()
   );
+  const inviteHandled = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isNight ? 'night' : 'day');
@@ -144,16 +145,19 @@ export const App: React.FC = () => {
 
   // Auto-join Duo room via ?room=MMT-XXXX invite link
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || inviteHandled.current || realtimeState.transport === 'connecting') return;
     const params = new URLSearchParams(window.location.search);
     const inviteCode = params.get('room');
     const flow = params.get('flow');
     if (inviteCode && inviteCode.trim()) {
+      inviteHandled.current = true;
+      const code = inviteCode.trim().toUpperCase();
+      const saved = realtimeClient.getSavedSession();
       setMode('duo');
-      realtimeClient.joinRoom(inviteCode.trim().toUpperCase(), 'Guest');
+      if (realtimeState.transport !== 'websocket' || saved?.code !== code) realtimeClient.joinRoom(code, 'Guest');
       setActiveScreen(flow === 'flipbook' ? 'flipbook' : 'camera');
     }
-  }, []);
+  }, [realtimeState.transport]);
 
   useEffect(() => {
     return realtimeClient.subscribe((next) => {

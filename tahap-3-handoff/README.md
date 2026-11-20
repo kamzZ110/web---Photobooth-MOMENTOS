@@ -8,6 +8,7 @@ Status: **paket kerja untuk review pengguna**, 12 November 2026. Keputusan dalam
 2. Baca [02-ARSITEKTUR.md](02-ARSITEKTUR.md) dan [03-ALUR-DAN-KONTRAK.md](03-ALUR-DAN-KONTRAK.md).
 3. Gunakan [04-VALIDASI-DAN-BACKLOG.md](04-VALIDASI-DAN-BACKLOG.md) untuk urutan kerja dan bukti pengujian.
 4. Sebelum implementasi visual baca [panduan desain](../task2-draft/PANDUAN-DESAIN.md), [PRD draft](../task2-draft/PRD-MASTER.md), dan [alur draft](../task2-draft/ALUR-PRODUK.md). Ikuti juga instruksi AGENTS.md yang berlaku di direktori kerja.
+5. Untuk demo dan rancangan pemicu Flipbook, baca [05-EFEK-GESTUR-FLIPBOOK.md](05-EFEK-GESTUR-FLIPBOOK.md).
 
 ## Instruksi penting untuk AI berikutnya
 

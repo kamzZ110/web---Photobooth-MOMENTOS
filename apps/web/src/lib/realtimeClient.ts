@@ -1,6 +1,10 @@
 import {
   DEFAULT_STICKER_LIBRARY,
+  DEFAULT_CLASSIC_CAMERA_EFFECTS,
+  updateClassicCameraEffects,
+  type ClassicCameraEffectChange,
   type AuthoritativeRoomSnapshot,
+  type DuoCameraAccessoryChange,
   type BoothMode,
   type ClientToServerMessage,
   type CollaborativeEditorState,
@@ -83,6 +87,7 @@ class MomentosRealtimeClient {
   private pc: RTCPeerConnection | null = null;
   private dc: RTCDataChannel | null = null;
   private localStream: MediaStream | null = null;
+  private pendingIce: RTCIceCandidateInit[] = [];
   private incomingTransfers = new Map<
     string,
     { role: ParticipantRole; frameIndex: number; totalChunks: number; chunks: string[] }
@@ -391,6 +396,8 @@ class MomentosRealtimeClient {
     selectedFilter?: PhotoFilterId;
     layout?: TemplateLayoutId;
     phase?: RoomSessionPhase;
+    classicCameraEffect?: ClassicCameraEffectChange;
+    flipbookAccessory?: DuoCameraAccessoryChange;
   }): void {
     const sent = this.sendWs({
       type: 'session:config',
@@ -398,6 +405,8 @@ class MomentosRealtimeClient {
     });
 
     if (!sent && this.state.snapshot) {
+      const accessory = patch.flipbookAccessory;
+      if ((accessory || patch.classicCameraEffect) && (this.state.role !== 'host' || this.state.snapshot.mode !== 'duo')) return;
       const prevLayout = this.state.snapshot.layout;
       const nextEditor = { ...this.state.snapshot.editorState };
       if (patch.layout && patch.layout !== prevLayout) {
@@ -420,6 +429,14 @@ class MomentosRealtimeClient {
         version: this.state.snapshot.version + 1,
         takeCount: patch.takeCount ?? this.state.snapshot.takeCount,
         selectedFilter: patch.selectedFilter ?? this.state.snapshot.selectedFilter,
+        classicCameraEffects: patch.classicCameraEffect
+          ? updateClassicCameraEffects(this.state.snapshot.classicCameraEffects ?? DEFAULT_CLASSIC_CAMERA_EFFECTS, patch.classicCameraEffect)
+          : this.state.snapshot.classicCameraEffects,
+        flipbookAccessories: accessory ? {
+          host: this.state.snapshot.flipbookAccessories?.host ?? 'none',
+          guest: this.state.snapshot.flipbookAccessories?.guest ?? 'none',
+          [accessory.role]: accessory.id,
+        } : this.state.snapshot.flipbookAccessories,
         layout: patch.layout ?? this.state.snapshot.layout,
         phase: patch.phase ?? this.state.snapshot.phase,
         editorState: nextEditor,
@@ -493,17 +510,18 @@ class MomentosRealtimeClient {
 
   public attachLocalStream(stream: MediaStream | null): void {
     this.localStream = stream;
-    if (this.pc && stream) {
-      const senders = this.pc.getSenders();
-      for (const track of stream.getTracks()) {
-        const existing = senders.find((s) => s.track?.kind === track.kind);
-        if (existing) {
-          void existing.replaceTrack(track);
-        } else {
-          this.pc.addTrack(track, stream);
-        }
-      }
-    }
+    if (!this.pc) return;
+    const pc = this.pc;
+    void this.attachCameraTrack(pc).catch(() => {
+      if (this.pc === pc) this.patchState({ webrtcState: 'failed' });
+    });
+  }
+
+  private async attachCameraTrack(pc: RTCPeerConnection): Promise<void> {
+    const video = pc.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === 'video');
+    if (!video) return;
+    const track = this.localStream?.getVideoTracks().find((candidate) => candidate.readyState === 'live') ?? null;
+    await video.sender.replaceTrack(track);
   }
 
   private getIceConfig(): RTCConfiguration {
@@ -536,12 +554,6 @@ class MomentosRealtimeClient {
     const pc = new RTCPeerConnection(this.getIceConfig());
     this.pc = pc;
 
-    if (this.localStream) {
-      for (const track of this.localStream.getTracks()) {
-        pc.addTrack(track, this.localStream);
-      }
-    }
-
     pc.onicecandidate = (ev) => {
       if (ev.candidate) {
         this.sendWebRtcSignal({
@@ -552,13 +564,8 @@ class MomentosRealtimeClient {
     };
 
     pc.ontrack = (ev) => {
-      const [remoteStream] = ev.streams;
-      if (remoteStream) {
-        this.patchState({
-          remoteStream,
-          webrtcState: this.state.forceTurnRelay ? 'relay' : 'connected',
-        });
-      }
+      const remoteStream = ev.streams[0] ?? new MediaStream([ev.track]);
+      this.patchState({ remoteStream });
     };
 
     pc.onconnectionstatechange = () => {
@@ -626,16 +633,17 @@ class MomentosRealtimeClient {
     this.cleanupWebRtc();
     if (typeof RTCPeerConnection === 'undefined') return;
 
-    this.patchState({ webrtcState: 'connecting' });
+    this.patchState({ webrtcState: 'connecting', remoteStream: null });
     const pc = this.ensurePeerConnection();
+    // Negotiate both camera directions even when users are still choosing a theme.
+    // Camera tracks can then start on either device without another offer.
+    pc.addTransceiver('video', { direction: 'sendrecv' });
     const channel = pc.createDataChannel('momentos-duo-frames', { ordered: true });
     this.setupDataChannel(channel);
 
     try {
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: false,
-        offerToReceiveVideo: true,
-      });
+      await this.attachCameraTrack(pc);
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       this.sendWebRtcSignal({
         kind: 'offer',
@@ -674,6 +682,9 @@ class MomentosRealtimeClient {
       if (signal.kind === 'offer' && signal.sdp) {
         this.patchState({ webrtcState: 'connecting' });
         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
+        const video = pc.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === 'video');
+        if (video) video.direction = 'sendrecv';
+        await this.attachCameraTrack(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         this.sendWebRtcSignal({
@@ -685,7 +696,16 @@ class MomentosRealtimeClient {
           new RTCSessionDescription({ type: 'answer', sdp: signal.sdp })
         );
       } else if (signal.kind === 'ice' && signal.candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate as RTCIceCandidateInit));
+        const candidate = signal.candidate as RTCIceCandidateInit;
+        if (!pc.remoteDescription) {
+          this.pendingIce.push(candidate);
+          return;
+        }
+        await pc.addIceCandidate(candidate);
+      }
+      if (pc.remoteDescription && this.pendingIce.length > 0) {
+        const pending = this.pendingIce.splice(0);
+        for (const candidate of pending) await pc.addIceCandidate(candidate);
       }
     } catch {
       this.patchState({ webrtcState: 'failed' });
@@ -710,6 +730,7 @@ class MomentosRealtimeClient {
       this.pc = null;
     }
     this.incomingTransfers.clear();
+    this.pendingIce = [];
   }
 
   public requestCountdown(takeNumber: number): void {
