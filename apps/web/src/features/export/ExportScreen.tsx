@@ -101,7 +101,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
     <div className="page-stack">
       <section>
         <div className="page-intro">
-          <span className="eyebrow-text">Final Canvas 2D Render &amp; Export</span>
+          <span className="eyebrow-text">Unduh Foto Classic</span>
           <h1 className="heading-h1" style={{ marginBottom: 12 }}>
             Cetak dan unduh hasil photobooth-mu.
           </h1>
@@ -110,30 +110,6 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
             <strong>{layout}</strong>, filter <strong>{selectedFilter}</strong>, dan stiker
             aktif.
           </p>
-        </div>
-
-        <div className="demo-state-strip">
-          <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#52525B' }}>
-            Simulasi Status Export:
-          </span>
-          {(
-            [
-              { id: 'idle', label: 'Siap' },
-              { id: 'rendering', label: 'Rendering' },
-              { id: 'success', label: 'Berhasil' },
-              { id: 'error', label: 'Gagal (Retry)' },
-            ] as Array<{ id: ExportStatus; label: string }>
-          ).map((st) => (
-            <button
-              key={st.id}
-              type="button"
-              className={`btn btn-lift ${status === st.id ? 'active-pill' : ''}`}
-              style={{ minHeight: 32, padding: '4px 12px', fontSize: '0.76rem' }}
-              onClick={() => setStatus(st.id)}
-            >
-              {st.label}
-            </button>
-          ))}
         </div>
 
         <div className="grid-2" style={{ alignItems: 'center' }}>
@@ -170,7 +146,6 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                   bg: stripTint === '#FFFFFF' ? fr.accentBg : stripTint,
                   imageDataUrl: fr.imageDataUrl,
                 }))}
-                onTriggerShutter={handleRealDownload}
               />
             )}
 
@@ -185,7 +160,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
           <div className="clean-card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
               <h2 className="heading-h2" style={{ marginBottom: 8 }}>
-                Pilih Format Unduhan Nyata
+                Format Unduhan
               </h2>
               <p className="text-muted" style={{ fontSize: '0.92rem' }}>
                 Klik tombol di bawah untuk mengunduh file gambar asli langsung dari browser ke
@@ -198,7 +173,8 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                 type="button"
                 className={`btn btn-lift ${format === 'png' ? 'active-pill' : ''}`}
                 style={{ flex: 1 }}
-                onClick={() => setFormat('png')}
+                disabled={status === 'rendering'}
+                aria-pressed={format === 'png'} onClick={() => { setFormat('png'); setStatus('idle'); }}
               >
                 Format PNG (Tajam)
               </button>
@@ -206,14 +182,15 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                 type="button"
                 className={`btn btn-lift ${format === 'jpg' ? 'active-pill' : ''}`}
                 style={{ flex: 1 }}
-                onClick={() => setFormat('jpg')}
+                disabled={status === 'rendering'}
+                aria-pressed={format === 'jpg'} onClick={() => { setFormat('jpg'); setStatus('idle'); }}
               >
                 Format JPG (Ringan)
               </button>
             </div>
 
             {status === 'rendering' && (
-              <div
+              <div role="status"
                 style={{
                   padding: 14,
                   borderRadius: 14,
@@ -227,7 +204,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
             )}
 
             {status === 'success' && (
-              <div
+              <div role="status"
                 style={{
                   padding: 14,
                   borderRadius: 14,
@@ -236,12 +213,12 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
                   fontWeight: 700,
                 }}
               >
-                ✅ File <code>momentos-{mode}-{layout}.{format}</code> berhasil diunduh!
+                ✅ File <code>momentos-{mode}-{layout}.{format}</code> siap. Unduhan sudah dimulai.
               </div>
             )}
 
             {status === 'error' && (
-              <div
+              <div role="status"
                 style={{
                   padding: 14,
                   borderRadius: 14,
@@ -264,7 +241,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
             >
               {status === 'error'
                 ? `🔄 Coba Unduh Ulang (.${format.toUpperCase()})`
-                : `⬇️ Unduh Strip (.${format.toUpperCase()})`}
+                : status === 'rendering' ? 'Menyiapkan file…' : `Unduh Foto (.${format.toUpperCase()})`}
             </button>
 
             <div style={{ display: 'flex', gap: 10 }}>

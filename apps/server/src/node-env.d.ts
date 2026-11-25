@@ -63,7 +63,27 @@ declare module 'node:crypto' {
     update(data: string): Hash;
     digest(encoding: 'base64' | 'hex'): string;
   }
+  export function randomBytes(size: number): { toString(encoding: string): string };
+  export function createHmac(algorithm: string, secret: string): Hash;
   export function createHash(algorithm: string): Hash;
   export function randomUUID(): string;
   export function randomInt(min: number, max: number): number;
+}
+
+declare module 'ws' {
+  import type { IncomingMessage, DuplexSocket } from 'node:http';
+  export class WebSocket {
+    static readonly OPEN: number;
+    readonly readyState: number;
+    readonly bufferedAmount: number;
+    send(data: string): void;
+    close(code: number, reason: string): void;
+    terminate(): void;
+    on(event: 'message', listener: (data: Buffer, isBinary: boolean) => void): void;
+    on(event: 'close' | 'error', listener: () => void): void;
+  }
+  export class WebSocketServer {
+    constructor(options: { noServer: boolean; maxPayload: number; perMessageDeflate: boolean });
+    handleUpgrade(req: IncomingMessage, socket: DuplexSocket, head: Buffer, callback: (ws: WebSocket) => void): void;
+  }
 }

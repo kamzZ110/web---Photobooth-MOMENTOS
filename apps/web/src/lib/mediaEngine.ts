@@ -1,4 +1,5 @@
 import {
+  FLIPBOOK_CAPTURE_FRAME_COUNT,
   PHOTO_FILTER_PRESETS,
   type BoothMode,
   type CameraAccessoryId,
@@ -11,6 +12,7 @@ import {
   type TemplateLayoutId,
 } from '@momentos/shared';
 import { cameraCoverCrop, drawTrackedCameraAccessory, flipbookCameraBoxes, hasCameraFrame, type CameraBox, type FaceAnchors } from './cameraAccessories';
+import { drawLiveGestureEffect, type GestureVisual } from '../features/flipbook/drawEffectDemo';
 
 export const FLIPBOOK_FRAME_WIDTH = 640;
 export const FLIPBOOK_FRAME_HEIGHT = 360;
@@ -18,8 +20,6 @@ export const CLASSIC_FRAME_WIDTH = 960;
 export const CLASSIC_FRAME_HEIGHT = 540;
 
 interface ClassicPhotoEffects {
-  overlay: FlipbookEffectOverlayId;
-  poseIndex: number;
   accessory?: { id: CameraAccessoryId; face: FaceAnchors | null; timeMs: number };
 }
 
@@ -610,21 +610,10 @@ export function drawClassicPhotoEffects(
   video?: HTMLVideoElement,
   mirror = false,
 ) {
-  const { accessory, overlay, poseIndex } = effects;
+  const { accessory } = effects;
   if (accessory && video) {
     drawTrackedCameraAccessory(ctx, accessory.id, accessory.face, video.videoWidth, video.videoHeight, box, mirror, accessory.timeMs);
   }
-  if (overlay === 'none') return;
-
-  const scale = box.height / FLIPBOOK_FRAME_HEIGHT;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(box.x, box.y, box.width, box.height);
-  ctx.clip();
-  ctx.translate(box.x, box.y);
-  ctx.scale(scale, scale);
-  drawFlipbookRecordingOverlay(ctx, overlay, (poseIndex * 12 + 3) % 60, 60, box.width / scale, box.height / scale);
-  ctx.restore();
 }
 
 export function captureFlipbookFrameDataUrl(options: {
@@ -639,6 +628,9 @@ export function captureFlipbookFrameDataUrl(options: {
   mirror?: boolean;
   localOnRight?: boolean;
   accessories?: { local: FlipbookFrameAccessory; remote: FlipbookFrameAccessory; timeMs: number };
+  gesture?: GestureVisual | null;
+  targetCanvas?: HTMLCanvasElement;
+  compact?: boolean;
   paperColor?: string;
   accentHex?: string;
   width?: number;
@@ -656,17 +648,21 @@ export function captureFlipbookFrameDataUrl(options: {
     mirror = true,
     localOnRight = false,
     accessories,
+    gesture,
+    targetCanvas,
+    compact = false,
     paperColor = '#FBF7EF',
     accentHex = '#BC4374',
     width = FLIPBOOK_FRAME_WIDTH,
     height = FLIPBOOK_FRAME_HEIGHT,
   } = options;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  const canvas = targetCanvas ?? document.createElement('canvas');
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
+  ctx.clearRect(0, 0, width, height);
 
   const drawVideoBox = (
     vid: HTMLVideoElement,
@@ -746,6 +742,7 @@ export function captureFlipbookFrameDataUrl(options: {
   }
 
   drawFlipbookRecordingOverlay(ctx, overlayId, frameIndex, totalFrames, width, height);
+  drawLiveGestureEffect(ctx, gesture ?? null, width, height);
 
   // Registration stamp bottom right
   ctx.fillStyle = accentHex;
@@ -760,7 +757,7 @@ export function captureFlipbookFrameDataUrl(options: {
     height - 19
   );
 
-  return canvas.toDataURL('image/png');
+  return compact ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png');
 }
 
 function drawSpiralSpine(
@@ -823,6 +820,7 @@ export async function renderFlipbookCoverDataUrl(options: {
   accentHex: string;
   openProgress?: number; // 0 = closed cover, 0..1 = opening cover animation
   firstPageDataUrl?: string;
+  frameCount?: number;
 }): Promise<string> {
   const {
     width = FLIPBOOK_FRAME_WIDTH,
@@ -834,6 +832,7 @@ export async function renderFlipbookCoverDataUrl(options: {
     accentHex,
     openProgress = 0,
     firstPageDataUrl,
+    frameCount = FLIPBOOK_CAPTURE_FRAME_COUNT,
   } = options;
 
   const canvas = document.createElement('canvas');
@@ -909,7 +908,7 @@ export async function renderFlipbookCoverDataUrl(options: {
   // Decorative Book Emblem (Strictly NO photo on cover!)
   ctx.fillStyle = accentHex;
   ctx.font = '700 13px monospace';
-  ctx.fillText('✦  60 FRAMES · MOTION BOOK  ✦', centerX, height / 2 - 42);
+  ctx.fillText(`✦  ${frameCount} FRAMES · MOTION BOOK  ✦`, centerX, height / 2 - 42);
 
   // Theme Title
   ctx.fillStyle = textPrimary;
@@ -959,7 +958,7 @@ export async function renderFlipbookCoverDataUrl(options: {
  * Susun sequence GIF lengkap:
  * 1. Cover Pembuka tanpa foto (~0.4 detik / 400ms)
  * 2. Animasi cepat membuka sampul buku (3 frame transisi)
- * 3. Membalik halaman Frame 1 s/d Frame 60 dengan jilid spiral di kiri (~12 FPS / 85ms)
+ * 3. Membalik seluruh halaman dengan jilid spiral di kiri (~12 FPS / 85ms)
  */
 export async function buildFlipbookGifSequenceWithCover(params: {
   frames: string[];
@@ -999,6 +998,7 @@ export async function buildFlipbookGifSequenceWithCover(params: {
     binderColor,
     paperColor,
     accentHex,
+    frameCount: frames.length,
     openProgress: 0,
   });
   allFrames.push(closedCoverUrl);
@@ -1014,6 +1014,7 @@ export async function buildFlipbookGifSequenceWithCover(params: {
       binderColor,
       paperColor,
       accentHex,
+      frameCount: frames.length,
       openProgress: prog,
       firstPageDataUrl: firstPage,
     });
@@ -1021,7 +1022,7 @@ export async function buildFlipbookGifSequenceWithCover(params: {
     frameDelaysMs.push(65);
   }
 
-  // 3. Render each of the 60 pages inside the spiral-bound book frame at ~12 FPS (85ms)
+  // 3. Render all recorded pages inside the spiral-bound book frame.
   const pageCanvas = document.createElement('canvas');
   pageCanvas.width = width;
   pageCanvas.height = height;

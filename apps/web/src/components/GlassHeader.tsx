@@ -1,3 +1,4 @@
+import { publicPages, type PublicScreen } from '../app/publicPages';
 import React from 'react';
 import type { BoothMode, ScreenId } from '@momentos/shared';
 import { MiniCameraStripIcon } from './InstantCameraRig';
@@ -11,7 +12,7 @@ interface GlassHeaderProps {
   onToggleNight: () => void;
 }
 
-const CENTER_INFO_PAGES: Array<{ id: ScreenId; label: string }> = [
+const CENTER_INFO_PAGES: Array<{ id: PublicScreen; label: string }> = [
   { id: 'how-it-works', label: 'Cara Kerja' },
   { id: 'modes-info', label: 'Mode Solo & Duo' },
   { id: 'studio-features', label: 'Fitur Studio' },
@@ -24,45 +25,35 @@ export const GlassHeader: React.FC<GlassHeaderProps> = ({
   isNight,
   onToggleNight,
 }) => {
+  const navigate = (event: React.MouseEvent<HTMLAnchorElement>, page: PublicScreen) => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    onSelectScreen(page);
+    window.scrollTo({ top: 0 });
+  };
   return (
     <header className="top-header-full">
       <div className="top-header-inner">
         {/* KIRI UJUNG: Brand Momentos */}
         <div className="header-left">
-          <div
-            className="brand-group"
-            onClick={() => {
-              onSelectScreen('home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                onSelectScreen('home');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            }}
-          >
+          <a href="/" className="brand-group" aria-label="MOMENTOS, beranda" onClick={event => navigate(event, 'home')}>
             <MiniCameraStripIcon size={36} variant={isNight ? 'retro' : 'white'} />
             <span className="brand-title">Momentos</span>
-          </div>
+          </a>
         </div>
 
         {/* TENGAH: 4 Tombol Halaman Utama */}
         <nav className="header-center screen-nav" aria-label="Navigasi Utama">
           {CENTER_INFO_PAGES.map((page) => (
-            <button
+            <a
               key={page.id}
-              type="button"
+              href={publicPages[page.id].path}
+              aria-current={activeScreen === page.id ? "page" : undefined}
               className={`nav-link-clean ${activeScreen === page.id ? 'active' : ''}`}
-              onClick={() => {
-                onSelectScreen(page.id);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+              onClick={event => navigate(event, page.id)}
             >
               {page.label}
-            </button>
+            </a>
           ))}
         </nav>
 
@@ -79,7 +70,7 @@ export const GlassHeader: React.FC<GlassHeaderProps> = ({
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           >
-            Mulai Booth →
+            Mulai Booth
           </button>
         </div>
       </div>

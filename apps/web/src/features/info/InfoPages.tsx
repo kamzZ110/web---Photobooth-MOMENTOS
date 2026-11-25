@@ -39,13 +39,13 @@ export const HowItWorksPage: React.FC<InfoPageProps> = ({
               {
                 num: '01',
                 title: 'Pilih Mode Solo atau Buat Room Duo',
-                desc: 'Untuk foto sendiri, kamu bisa langsung melompat ke layar kamera. Untuk foto berdua, Host membuat Room privat lalu membagikan kode undangan 8-karakter kepada 1 Guest.',
+                desc: 'Untuk foto sendiri, kamu bisa langsung melompat ke layar kamera. Untuk foto berdua, Host membuat Room privat lalu membagikan kode undangan kepada 1 Guest.',
                 bg: '#FCEEF3',
               },
               {
                 num: '02',
                 title: 'Atur Kamera, Filter & Tekan Ready',
-                desc: 'Pilih jumlah pose (3 atau 4 take) dan filter warna. Pada Mode Duo, kedua peserta menekan tombol Ready agar aba-aba hitung mundur berjalan serentak.',
+                desc: 'Pilih jumlah pose (1 sampai 8 take) dan filter warna. Pada Mode Duo, kedua peserta menekan tombol Ready agar aba-aba hitung mundur berjalan serentak.',
                 bg: '#EBF4FD',
               },
               {
@@ -147,7 +147,7 @@ export const HowItWorksPage: React.FC<InfoPageProps> = ({
             className="btn btn-primary-pop"
             onClick={() => onStartMode('solo', 'camera')}
           >
-            Mulai Mode Solo →
+            Mulai Mode Solo
           </button>
           <button
             type="button"
@@ -208,7 +208,7 @@ export const ModesInfoPage: React.FC<InfoPageProps> = ({
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <span>✓ Langsung buka kamera dalam 1 klik</span>
-                <span>✓ Pilihan 3 atau 4 pose beruntun</span>
+                <span>✓ Pilihan 1 sampai 8 pose beruntun</span>
                 <span>✓ Kuota hingga 3× foto ulang (retake) mandiri</span>
                 <span>✓ Bebas hias stiker, warna kertas, dan teks caption</span>
               </div>
@@ -220,7 +220,7 @@ export const ModesInfoPage: React.FC<InfoPageProps> = ({
               style={{ width: '100%' }}
               onClick={() => onStartMode('solo', 'camera')}
             >
-              Mulai Sesi Solo Sekarang →
+              Mulai Sesi Solo Sekarang
             </button>
           </div>
 
@@ -253,7 +253,7 @@ export const ModesInfoPage: React.FC<InfoPageProps> = ({
               style={{ width: '100%' }}
               onClick={() => onStartMode('duo', 'room')}
             >
-              Buat atau Gabung Room Duo →
+              Buat atau Gabung Room Duo
             </button>
           </div>
         </div>
@@ -428,8 +428,7 @@ export const StudioFeaturesPage: React.FC<InfoPageProps> = ({
               Snapshot Final Konsisten
             </h3>
             <p className="text-muted" style={{ fontSize: '0.92rem' }}>
-              Pada Mode Duo, snapshot akhir dibekukan terlebih dahulu sehingga file
-              yang diunduh Host dan Guest dijamin identik.
+              Masing-masing peserta Duo bisa mengunduh foto dari editor. Tunggu sampai perubahan temanmu terlihat sebelum mengunduh versi yang sama.
             </p>
           </div>
         </div>
@@ -441,7 +440,7 @@ export const StudioFeaturesPage: React.FC<InfoPageProps> = ({
           className="btn btn-primary-pop"
           onClick={() => onStartMode('solo', 'editor')}
         >
-          Coba Langsung Layar Editor →
+          Coba Langsung Layar Editor
         </button>
         <button
           type="button"
@@ -468,7 +467,7 @@ export const PrivacyInfoPage: React.FC<InfoPageProps> = ({
     {
       num: '01',
       q: 'Mengapa Momentos tidak menyediakan fitur akun atau riwayat foto?',
-      a: 'Agar kamu bisa langsung berfoto tanpa menyerahkan alamat email, nomor telepon, atau data pribadi. Setiap sesi bersifat sementara dan selesai begitu kamu menutup halaman.',
+      a: 'Agar kamu bisa langsung berfoto tanpa menyerahkan alamat email, nomor telepon, atau data pribadi. Unduh foto yang ingin kamu simpan sebelum meninggalkan sesi.',
     },
     {
       num: '02',
@@ -478,7 +477,7 @@ export const PrivacyInfoPage: React.FC<InfoPageProps> = ({
     {
       num: '03',
       q: 'Berapa lama data sesi sementara disimpan untuk kebutuhan reconnect?',
-      a: 'Room hanya menahan state sesi selama maksimal 5 menit apabila salah satu peserta terputus agar dapat menyambung kembali (rejoin). Setelah sesi berakhir, room ditutup.',
+      a: 'Peserta punya waktu hingga 5 menit untuk tersambung kembali. Server menyimpan data room di memori dan membersihkan room kedaluwarsa secara berkala, dengan batas sesi satu jam.',
     },
     {
       num: '04',
@@ -536,8 +535,7 @@ export const PrivacyInfoPage: React.FC<InfoPageProps> = ({
               Siklus Sesi Sementara
             </h2>
             <p className="text-muted" style={{ fontSize: '0.94rem' }}>
-              Aset hanya diproses selama sesi berlangsung (dengan jendela pemulihan
-              koneksi 5 menit) dan langsung diunduh ke perangkatmu.
+              Foto Duo dikirim langsung antarpeserta saat kanal P2P tersedia. Jika kanal belum siap, server dapat menyimpan foto sementara di memori room untuk menyinkronkan kedua perangkat.
             </p>
           </div>
         </div>
@@ -568,7 +566,7 @@ export const PrivacyInfoPage: React.FC<InfoPageProps> = ({
                     {isOpen ? '−' : '+'}
                   </span>
                 </button>
-                {isOpen && <div className="faq-body">{item.a}</div>}
+                <div className="faq-body" hidden={!isOpen}>{item.a}</div>
               </div>
             );
           })}
@@ -581,7 +579,7 @@ export const PrivacyInfoPage: React.FC<InfoPageProps> = ({
           className="btn btn-primary-pop"
           onClick={() => onStartMode('solo', 'camera')}
         >
-          Mulai Sesi Privat Sekarang →
+          Mulai Sesi Privat Sekarang
         </button>
         <button
           type="button"

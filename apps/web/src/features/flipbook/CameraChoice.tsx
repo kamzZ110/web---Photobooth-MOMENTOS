@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { CameraAccessoryId, FlipbookEffectOverlayId } from '@momentos/shared';
+import { FLIPBOOK_CAPTURE_FRAME_COUNT, type CameraAccessoryId, type FlipbookEffectOverlayId } from '@momentos/shared';
 import samplePhotoUrl from '@assets/Gemini_Generated_Image_1w8io41w8io41w8i.jpg';
 import { drawCameraAccessory } from '../../lib/cameraAccessories';
 import { drawFlipbookRecordingOverlay } from '../../lib/mediaEngine';
@@ -59,7 +59,7 @@ export function CameraChoice({ label, selected, onSelect, cssFilter, accessory, 
           nose: point(0.762, 0.169),
         }, 0);
       }
-      if (overlay) drawFlipbookRecordingOverlay(ctx, overlay, 3, 60, SIZE, SIZE);
+      if (overlay) drawFlipbookRecordingOverlay(ctx, overlay, 3, FLIPBOOK_CAPTURE_FRAME_COUNT, SIZE, SIZE);
     }).catch(() => {
       // The text label remains usable when the sample cannot be loaded.
     });

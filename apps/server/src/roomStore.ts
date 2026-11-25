@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   DEFAULT_STICKER_LIBRARY,
   DEFAULT_CLASSIC_CAMERA_EFFECTS,
@@ -50,6 +50,7 @@ interface InternalRoom {
   layout: TemplateLayoutId;
   retakesRemaining: number;
   participants: InternalParticipant[];
+  guestAdmitted?: boolean;
   countdown: ScheduledCountdown | null;
   retakePrompt: RetakePromptState | null;
   syncedFrames: SyncedFrameMedia[];
@@ -60,7 +61,7 @@ export function createInitialEditorState(): CollaborativeEditorState {
   return {
     editorVersion: 1,
     stripTint: '#FFFFFF',
-    caption: 'Nov 14, 2026 12:02pm',
+    caption: '',
     stickers: DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s, active: false })),
     placedStickers: [],
     history: [],
@@ -77,11 +78,11 @@ export class RoomStore {
   }
 
   private generateCode(): string {
-    for (let i = 0; i < 20; i++) {
-      const code = `MMT-${randomInt(1000, 9999)}`;
-      if (!this.rooms.has(code)) return code;
-    }
-    return `MMT-${randomUUID().slice(0, 4).toUpperCase()}`;
+    let code: string;
+    do {
+      code = 'MMT-' + randomBytes(5).toString('hex').toUpperCase();
+    } while (this.rooms.has(code));
+    return code;
   }
 
   private toPublicSnapshot(room: InternalRoom): AuthoritativeRoomSnapshot {
@@ -195,7 +196,7 @@ export class RoomStore {
       createdAt: now,
       expiresAt: now + HARD_SESSION_TTL_MS,
       idleDestroyAt: null,
-      takeCount: Math.max(1, Math.min(8, Math.round(params.takeCount ?? 3))),
+      takeCount: Math.max(1, Math.min(8, Math.round(params.takeCount ?? 4))),
       selectedFilter: params.selectedFilter ?? 'normal',
       layout: 'strip-1x4',
       retakesRemaining: 3,
@@ -257,7 +258,7 @@ export class RoomStore {
       };
     }
 
-    if (room.participants.length >= MAX_PARTICIPANTS) {
+    if (room.guestAdmitted || room.participants.length >= MAX_PARTICIPANTS) {
       return {
         ok: false,
         errorCode: 'ROOM_FULL',
@@ -278,6 +279,7 @@ export class RoomStore {
       rejoinToken,
     };
 
+    room.guestAdmitted = true;
     room.participants.push(guest);
     room.version += 1;
     this.recomputeConnectionState(room, now);
@@ -518,7 +520,15 @@ export class RoomStore {
     }
 
     const now = Date.now();
+    const pose = room.syncedFrames[takeNumber - 1];
+    const prompt = room.retakePrompt;
+    const complete = pose?.retakes?.host !== undefined && pose.retakes.guest !== undefined;
+    const approved = prompt?.status === 'approved' && prompt.frameId === takeNumber;
+    if (!pose || takeNumber > room.takeCount || (complete && !approved)) {
+      return { ok: false, errorCode: 'NOT_READY', message: 'Pilih foto dan setujui pengambilan ulang terlebih dahulu.' };
+    }
     const countdown: ScheduledCountdown = {
+      retakeRole: prompt?.status === 'approved' && prompt.frameId === takeNumber ? prompt.requestedBy : undefined,
       attemptId: randomUUID(),
       takeNumber,
       startedAtServer: now,
@@ -537,10 +547,11 @@ export class RoomStore {
     code: string,
     role: ParticipantRole,
     frameIndex: number,
-    dataUrl: string
+    dataUrl?: string
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
-    if (!room || frameIndex < 0 || frameIndex > 7) return null;
+    if (!room || room.countdown?.takeNumber !== frameIndex + 1) return null;
+    if (room.countdown.retakeRole && room.countdown.retakeRole !== role) return null;
 
     let entry = room.syncedFrames.find((f) => f.frameIndex === frameIndex);
     if (!entry) {
@@ -548,6 +559,15 @@ export class RoomStore {
       room.syncedFrames.push(entry);
     }
 
+    const previous = entry.retakes?.[role];
+    if (room.countdown.retakeRole && (previous ?? 0) >= 3) return null;
+    const nextCount = room.countdown.retakeRole ? (previous ?? 0) + 1 : (previous ?? 0);
+    entry.retakes = { ...entry.retakes, [role]: nextCount };
+    if (room.countdown.retakeRole || (entry.retakes.host !== undefined && entry.retakes.guest !== undefined)) {
+      room.countdown = null;
+      room.phase = 'review';
+      room.retakePrompt = null;
+    }
     if (role === 'host') {
       entry.hostDataUrl = dataUrl;
     } else {
@@ -564,7 +584,8 @@ export class RoomStore {
     frameId: number
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
-    if (!room || room.retakesRemaining <= 0) return null;
+    const count = room?.syncedFrames[frameId - 1]?.retakes?.[role];
+    if (!room || count === undefined || count >= 3 || room.retakePrompt?.status === 'pending') return null;
 
     room.retakePrompt = {
       requestId: randomUUID(),
@@ -573,7 +594,7 @@ export class RoomStore {
       status: role === 'host' ? 'approved' : 'pending',
     };
     if (role === 'host') {
-      room.retakesRemaining = Math.max(0, room.retakesRemaining - 1);
+      room.participants.forEach(p => { p.ready = false; });
     }
     room.version += 1;
     return this.toPublicSnapshot(room);
@@ -587,7 +608,7 @@ export class RoomStore {
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
     if (!room || role !== 'host' || !room.retakePrompt) return null;
-    if (room.retakePrompt.requestId !== requestId) return null;
+    if (room.retakePrompt.status !== 'pending' || room.retakePrompt.requestId !== requestId) return null;
 
     room.retakePrompt = {
       ...room.retakePrompt,
@@ -629,6 +650,8 @@ export class RoomStore {
 
     const now = Date.now();
     const editor = room.editorState;
+    if (params.kind === 'add-sticker' && editor.placedStickers.length >= 256) return null;
+    if (editor.history.length >= 2048) editor.history.shift();
 
     if (params.kind === 'toggle-sticker' && params.stickerId) {
       const stk = editor.stickers.find((s) => s.id === params.stickerId);
@@ -782,12 +805,6 @@ export class RoomStore {
       editor.lastActor = targetActor;
       room.version += 1;
     }
-    return this.toPublicSnapshot(room);
-  }
-
-  getPublicSnapshot(rawCode: string): AuthoritativeRoomSnapshot | null {
-    const room = this.rooms.get(rawCode.trim().toUpperCase());
-    if (!room) return null;
     return this.toPublicSnapshot(room);
   }
 

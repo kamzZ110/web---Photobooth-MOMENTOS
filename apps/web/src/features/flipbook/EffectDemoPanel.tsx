@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { DEMO_ANIMATION_MS, DEMO_HEIGHT, DEMO_WIDTH, drawEffectDemo } from './drawEffectDemo';
+import { DEMO_ANIMATION_MS, DEMO_HEIGHT, DEMO_WIDTH, drawEffectDemo, drawLiveGestureEffect } from './drawEffectDemo';
 import { EFFECT_DEMOS, type EffectDemo, type EffectDemoId } from './effectDemos';
+import { DemoCameraSurface, useDemoCamera } from './DemoCamera';
+import { gestureInstructions, gestureStatusText, useLiveGestureEffect } from './useLiveGestureEffect';
 import './effectDemos.css';
 
 interface EffectDemoPickerProps {
@@ -57,9 +59,9 @@ export function GestureDemo({ effect }: { effect: EffectDemo }) {
     const start = performance.now();
     let frameId = 0;
     const draw = (now: number) => {
-      const progress = reducedMotion ? 1 : Math.min((now - start) / DEMO_ANIMATION_MS, 1);
+      const progress = reducedMotion ? 0.75 : Math.min((now - start) / DEMO_ANIMATION_MS, 1);
       drawEffectDemo(ctx, effect, gestures, progress);
-      if (progress < 1) frameId = window.requestAnimationFrame(draw);
+      if (!reducedMotion && progress < 1) frameId = window.requestAnimationFrame(draw);
       else setFinished(true);
     };
     frameId = window.requestAnimationFrame(draw);
@@ -103,14 +105,61 @@ export function GestureDemo({ effect }: { effect: EffectDemo }) {
   );
 }
 
-export function EffectDemoPanel({ selected, onSelect }: EffectDemoPickerProps) {
+function LiveGestureDemo({ effect }: { effect: EffectDemo }) {
+  const camera = useDemoCamera();
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [trackingRetry, setTrackingRetry] = useState(0);
+  const tracking = useLiveGestureEffect({
+    videoRef: camera.videoRef, enabled: camera.ready && !camera.error, effect, retry: trackingRetry + camera.attempt,
+  });
+  const visual = useRef(tracking.getVisual);
+  visual.current = tracking.getVisual;
+
+  useEffect(() => {
+    const ctx = canvas.current?.getContext('2d');
+    if (!ctx) return;
+    let frame = 0;
+    const draw = (now: number) => {
+      ctx.clearRect(0, 0, DEMO_WIDTH, DEMO_HEIGHT);
+      drawLiveGestureEffect(ctx, visual.current(now), DEMO_WIDTH, DEMO_HEIGHT);
+      frame = window.requestAnimationFrame(draw);
+    };
+    frame = window.requestAnimationFrame(draw);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <div className="effect-demo-stage">
+      <DemoCameraSurface videoRef={camera.videoRef} canvasRef={canvas} onPlaying={() => camera.setReady(true)} />
+      <strong>{gestureInstructions(effect, false)}</strong>
+      <div className="effect-demo-status">
+        <p className="text-muted" role="status">{camera.error || (!camera.ready ? 'Menunggu kamera aktif…' : gestureStatusText(tracking.status, tracking.phase))}</p>
+        {camera.error && <button className="btn" type="button" onClick={camera.retry}>Coba kamera lagi</button>}
+        {!camera.error && tracking.status === 'unavailable' && <button className="btn" type="button" onClick={() => setTrackingRetry(value => value + 1)}>Coba pelacakan lagi</button>}
+      </div>
+    </div>
+  );
+}
+
+interface EffectDemoPanelProps extends EffectDemoPickerProps {
+  cameraActive: boolean;
+  onToggleCamera: () => void;
+}
+
+export function EffectDemoPanel({ selected, onSelect, cameraActive, onToggleCamera }: EffectDemoPanelProps) {
+  const live = cameraActive && selected.mode === 'solo';
   return (
     <section className="clean-card effect-demo-panel" aria-labelledby="effect-demo-heading">
       <div className="effect-demo-controls">
         <h2 className="heading-h3" id="effect-demo-heading">Coba efek gestur</h2>
         <EffectDemoPicker selected={selected} onSelect={onSelect} />
+        {selected.mode === 'solo' && (
+          <button type="button" className="btn btn-primary-pop" aria-pressed={live} onClick={onToggleCamera}>
+            {live ? 'Kembali ke ilustrasi' : 'Coba dengan kamera'}
+          </button>
+        )}
       </div>
-      <GestureDemo key={selected.id} effect={selected} />
+      {live ? <LiveGestureDemo effect={selected} /> : <GestureDemo key={selected.id} effect={selected} />}
     </section>
   );
 }

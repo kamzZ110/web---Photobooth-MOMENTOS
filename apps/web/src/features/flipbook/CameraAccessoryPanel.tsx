@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { CAMERA_ACCESSORY_IDS, isCameraAccessoryId, type CameraAccessoryId } from '@momentos/shared';
-import { drawCameraAccessory, type FaceAnchors, type Point } from '../../lib/cameraAccessories';
+import { drawCameraAccessory, drawTrackedCameraAccessory, hasCameraFrame, type FaceAnchors, type Point } from '../../lib/cameraAccessories';
 import { CameraChoice } from './CameraChoice';
+import { DemoCameraSurface, useDemoCamera } from './DemoCamera';
+import { DEMO_HEIGHT, DEMO_WIDTH } from './drawEffectDemo';
+import { useFaceAccessoryTracking } from './useFaceAccessoryTracking';
 import './cameraAccessories.css';
 
 const ACCESSORIES: Record<CameraAccessoryId, string> = {
@@ -98,13 +101,60 @@ function drawDemo(ctx: CanvasRenderingContext2D, accessory: CameraAccessoryId, m
   drawCameraAccessory(ctx, accessory, face, time);
 }
 
-export function CameraAccessoryDemo() {
+function LiveAccessoryDemo({ accessory }: { accessory: CameraAccessoryId }) {
+  const camera = useDemoCamera();
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [retry, setRetry] = useState(0);
+  const { face, status } = useFaceAccessoryTracking(camera.videoRef, camera.ready && !camera.error && accessory !== 'none', null, retry + camera.attempt);
+
+  useEffect(() => {
+    const ctx = canvas.current?.getContext('2d');
+    if (!ctx) return;
+    let frame = 0;
+    const draw = (now: number) => {
+      ctx.clearRect(0, 0, DEMO_WIDTH, DEMO_HEIGHT);
+      const video = camera.videoRef.current;
+      if (hasCameraFrame(video)) {
+        drawTrackedCameraAccessory(ctx, accessory, face.current, video.videoWidth, video.videoHeight,
+          { x: 0, y: 0, width: DEMO_WIDTH, height: DEMO_HEIGHT }, true, now);
+      }
+      frame = window.requestAnimationFrame(draw);
+    };
+    frame = window.requestAnimationFrame(draw);
+    return () => window.cancelAnimationFrame(frame);
+  }, [accessory, camera.videoRef, face]);
+
+  const message = camera.error || (!camera.ready ? 'Menunggu kamera aktif…'
+    : status === 'unavailable' ? 'Pelacakan wajah gagal dimuat. Periksa internet, lalu coba lagi.'
+    : status === 'loading' || status === 'idle' && accessory !== 'none' ? 'Menyiapkan pelacakan wajah…'
+    : accessory === 'none' ? 'Pilih aksesori untuk mencobanya.'
+    : status === 'tracking' ? 'Aksesori aktif. Coba gerakkan kepala.' : 'Arahkan wajah ke kamera.');
+
+  return (
+    <div className="effect-demo-stage">
+      <DemoCameraSurface videoRef={camera.videoRef} canvasRef={canvas} onPlaying={() => camera.setReady(true)} />
+      <p className="text-muted" role="status">{message}</p>
+      {camera.error && <button type="button" className="btn btn-lift" onClick={camera.retry}>Coba kamera lagi</button>}
+      {!camera.error && status === 'unavailable' && <button type="button" className="btn btn-lift" onClick={() => setRetry(value => value + 1)}>Coba pelacakan lagi</button>}
+    </div>
+  );
+}
+
+interface CameraAccessoryDemoProps {
+  allowCamera: boolean;
+  cameraActive: boolean;
+  onToggleCamera: () => void;
+}
+
+export function CameraAccessoryDemo({ allowCamera, cameraActive, onToggleCamera }: CameraAccessoryDemoProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [selected, setSelected] = useState<CameraAccessoryId>('santa-hat');
   const [movement, setMovement] = useState(0);
   const [playCount, setPlayCount] = useState(0);
+  const live = allowCamera && cameraActive;
 
   useEffect(() => {
+    if (live) return;
     const ctx = canvas.current?.getContext('2d');
     if (!ctx) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -123,24 +173,27 @@ export function CameraAccessoryDemo() {
     drawDemo(ctx, selected, movement, 0, 0);
     frame = window.requestAnimationFrame(animate);
     return () => window.cancelAnimationFrame(frame);
-  }, [selected, movement, playCount]);
+  }, [selected, movement, playCount, live]);
 
   return (
     <section className="clean-card camera-accessory-demo" aria-labelledby="camera-accessory-demo-title">
       <div>
         <h2 className="heading-h3" id="camera-accessory-demo-title">Coba Aksesori Kamera</h2>
         <CameraAccessoryPicker label="Pilih aksesori" selected={selected} onSelect={setSelected} />
-        <div className="camera-accessory-movements" role="group" aria-label="Gerakan contoh">
+        {!live && <div className="camera-accessory-movements" role="group" aria-label="Gerakan contoh">
           {MOVEMENTS.map((name, index) => (
             <button key={name} type="button" className="btn btn-lift"
               aria-pressed={movement === index} onClick={() => { setMovement(index); setPlayCount((count) => count + 1); }}>
               {name}
             </button>
           ))}
-        </div>
+        </div>}
+        {allowCamera && <button className="btn btn-primary-pop" type="button" aria-pressed={live} onClick={onToggleCamera}>
+          {live ? 'Kembali ke ilustrasi' : 'Coba aksesori dengan kamera'}
+        </button>}
       </div>
-      <canvas ref={canvas} width={WIDTH} height={HEIGHT} role="img"
-        aria-label={`Ilustrasi ${ACCESSORIES[selected]} saat kepala bergerak`} />
+      {live ? <LiveAccessoryDemo accessory={selected} /> : <canvas ref={canvas} width={WIDTH} height={HEIGHT} role="img"
+        aria-label={`Ilustrasi ${ACCESSORIES[selected]} saat kepala bergerak`} />}
     </section>
   );
 }

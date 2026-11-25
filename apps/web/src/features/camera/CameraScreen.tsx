@@ -3,13 +3,11 @@ import {
   PHOTO_FILTER_PRESETS,
   DEFAULT_CLASSIC_CAMERA_EFFECTS,
   updateClassicCameraEffects,
-  FLIPBOOK_OVERLAY_EFFECTS,
   type BoothMode,
   type CameraAccessoryId,
   type CameraPermissionState,
   type CapturedFrame,
   type ClassicCameraEffectChange,
-  type FlipbookEffectOverlayId,
   type PhotoFilterId,
   type ScreenId,
   type TemplateLayoutId,
@@ -44,6 +42,7 @@ interface CameraScreenProps {
   layout?: TemplateLayoutId;
   onChangeLayout?: (layout: TemplateLayoutId) => void;
   frames: CapturedFrame[];
+  initialPose?: number;
   onCaptureFrame: (
     frameIndex: number,
     dataUrl: string,
@@ -60,6 +59,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   selectedFilter,
   onChangeFilter,
   frames,
+  initialPose = 0,
   onCaptureFrame,
   realtimeState,
   onNavigate,
@@ -72,13 +72,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [mirror, setMirror] = useState<boolean>(true);
   const [countdownSec, setCountdownSec] = useState<3 | 5>(3);
-  const [hostReady, setHostReady] = useState(true);
-  const [guestReady, setGuestReady] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [flashActive, setFlashActive] = useState(false);
-  const [currentShot, setCurrentShot] = useState(0);
+  const [currentShot, setCurrentShot] = useState(initialPose);
   const [isAutoBursting, setIsAutoBursting] = useState(false);
-  const [soloOverlay, setSoloOverlay] = useState<FlipbookEffectOverlayId>('none');
   const [soloAccessory, setSoloAccessory] = useState<CameraAccessoryId>('none');
   const [localDuoEffects, setLocalDuoEffects] = useState(DEFAULT_CLASSIC_CAMERA_EFFECTS);
   const [copiedType, setCopiedType] = useState<'none' | 'code' | 'link'>('none');
@@ -105,14 +102,13 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
 
   const activeFilterCss = getCssFilterById(selectedFilter);
   const isDuo = mode === 'duo';
-  const activeRole = realtimeState?.role ?? 'host';
+  const activeRole = isDuo ? realtimeState?.role ?? 'host' : 'host';
   const remoteRole = activeRole === 'guest' ? 'host' : 'guest';
   const liveSnapshot = realtimeState?.snapshot;
   const canSetDuoEffects = activeRole === 'host';
   const activeDuoEffects = liveSnapshot?.mode === 'duo'
     ? liveSnapshot.classicCameraEffects ?? DEFAULT_CLASSIC_CAMERA_EFFECTS
     : localDuoEffects;
-  const overlay = isDuo ? activeDuoEffects.overlay : soloOverlay;
   const localAccessory = isDuo ? activeDuoEffects.accessories[activeRole] : soloAccessory;
   const remoteAccessory = isDuo ? activeDuoEffects.accessories[remoteRole] : 'none';
   const busy = countdown !== null || isAutoBursting;
@@ -121,10 +117,21 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const localTracking = useFaceAccessoryTracking(videoRef, canTrack && localAccessory !== 'none');
   const remoteTracking = useFaceAccessoryTracking(remoteVideoRef, Boolean(remoteStream) && remoteAccessory !== 'none', remoteStream);
   const waitingForAccessory = canTrack && localAccessory !== 'none' && localTracking.status === 'loading';
-  const showCameraEffects = overlay !== 'none' || (canTrack && localAccessory !== 'none') ||
+  const showCameraEffects = (canTrack && localAccessory !== 'none') ||
     (Boolean(remoteStream) && remoteAccessory !== 'none');
   const syncedRemotePhoto = activeRole === 'guest' ? frames[currentShot]?.imageDataUrl : frames[currentShot]?.guestImageDataUrl;
-  const roomCode = liveSnapshot?.code ?? 'MMT-4829';
+  const roomCode = liveSnapshot?.code ?? '';
+  const hostReady = Boolean(liveSnapshot?.participants.find(p => p.role === 'host')?.ready);
+  const guestReady = Boolean(liveSnapshot?.participants.find(p => p.role === 'guest')?.ready);
+  const myReady = activeRole === 'host' ? hostReady : guestReady;
+  const prompt = liveSnapshot?.retakePrompt;
+  const photo = frames[currentShot];
+  const myPhoto = isDuo && activeRole === 'guest' ? photo?.guestImageDataUrl : photo?.imageDataUrl;
+  const retakesLeft = Math.max(0, 3 - (photo?.retakeCount ?? 0));
+  const approved = isDuo && prompt?.status === 'approved' && prompt.frameId === currentShot + 1;
+  useEffect(() => {
+    if (isDuo && prompt && prompt.status !== 'rejected') setCurrentShot(prompt.frameId - 1);
+  }, [isDuo, prompt?.requestId, prompt?.status]);
 
   const applyDuoEffect = (change: ClassicCameraEffectChange) => {
     if (!canSetDuoEffects) return;
@@ -157,7 +164,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           return;
         }
         streamRef.current = stream;
-        realtimeClient.attachLocalStream(stream);
+        if (isDuo) realtimeClient.attachLocalStream(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
@@ -200,10 +207,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       ctx.clearRect(0, 0, CLASSIC_FRAME_WIDTH, CLASSIC_FRAME_HEIGHT);
       const local = videoRef.current;
       const remote = remoteVideoRef.current;
-      drawClassicPhotoEffects(ctx, boxes.local, { overlay, poseIndex: currentShot,
+      drawClassicPhotoEffects(ctx, boxes.local, {
         accessory: { id: localAccessory, face: localTracking.face.current, timeMs } }, hasCameraFrame(local) ? local : undefined, mirror);
       if (boxes.remote && (remoteStream || !syncedRemotePhoto)) {
-        drawClassicPhotoEffects(ctx, boxes.remote, { overlay, poseIndex: currentShot,
+        drawClassicPhotoEffects(ctx, boxes.remote, {
           accessory: { id: remoteAccessory, face: remoteTracking.face.current, timeMs } }, hasCameraFrame(remote) ? remote : undefined);
       }
       if ((canTrack && localAccessory !== 'none') || (remoteStream && remoteAccessory !== 'none')) {
@@ -212,14 +219,13 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     };
     frame = window.requestAnimationFrame(draw);
     return () => window.cancelAnimationFrame(frame);
-  }, [showCameraEffects, canTrack, mode, isDuo, activeRole, overlay, currentShot, localAccessory, remoteAccessory,
+  }, [showCameraEffects, canTrack, mode, isDuo, activeRole, currentShot, localAccessory, remoteAccessory,
     localTracking.face, remoteTracking.face, mirror, remoteStream, syncedRemotePhoto]);
 
   const performSnapAtIndex = (slotIdx: number) => {
     const targetFrame = frames[slotIdx];
     const width = isDuo ? CLASSIC_FRAME_WIDTH / 2 : CLASSIC_FRAME_WIDTH;
     const height = CLASSIC_FRAME_HEIGHT;
-    const effects = { overlay, poseIndex: slotIdx };
     let dataUrl = '';
 
     if (!useSimulation && hasCameraFrame(videoRef.current)) {
@@ -228,9 +234,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         cssFilter: activeFilterCss,
         width,
         height,
-        effects: { ...effects, accessory: { id: localAccessory, face: localTracking.face.current, timeMs: performance.now() } },
+        effects: { accessory: { id: localAccessory, face: localTracking.face.current, timeMs: performance.now() } },
       });
-    } else if (targetFrame) {
+    } else if (useSimulation && targetFrame) {
       dataUrl = createSimulatedPoseDataUrl(
         activeRole === 'guest' ? targetFrame.guestPose : targetFrame.hostPose,
         `${targetFrame.label} (${activeRole.toUpperCase()})`,
@@ -238,7 +244,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         activeFilterCss,
         width,
         height,
-        effects,
       );
     }
 
@@ -246,28 +251,13 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       setFlashActive(true);
       onCaptureFrame(slotIdx, dataUrl, activeRole);
 
-      const hasLiveGuest =
-        (realtimeState?.snapshot?.participants.length ?? 0) >= 2;
-      if (mode === 'duo' && !hasLiveGuest && targetFrame) {
-        const guestSimUrl = createSimulatedPoseDataUrl(
-          targetFrame.guestPose,
-          `${targetFrame.label} (GUEST)`,
-          '#EBF4FD',
-          activeFilterCss,
-          width,
-          height,
-          effects,
-        );
-        onCaptureFrame(slotIdx, guestSimUrl, 'guest');
-      }
-
       window.setTimeout(() => setFlashActive(false), 240);
     }
   };
 
   useEffect(() => {
     const sched = realtimeState?.lastScheduledCountdown;
-    if (!sched || sched.attemptId === lastHandledAttemptRef.current) return;
+    if (!isDuo || !sched || (realtimeState?.transport === 'websocket' && liveSnapshot?.countdown?.attemptId !== sched.attemptId) || (sched.retakeRole && sched.retakeRole !== activeRole) || sched.attemptId === lastHandledAttemptRef.current) return;
     lastHandledAttemptRef.current = sched.attemptId;
 
     const targetIdx = Math.max(0, Math.min(takeCount - 1, sched.takeNumber - 1));
@@ -286,16 +276,18 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     const t0 = window.setTimeout(() => {
       setCountdown(null);
       performSnapAtIndex(targetIdx);
-      setCurrentShot((prev) => (prev + 1 < takeCount ? prev + 1 : 0));
     }, totalWaitMs);
 
     return () => {
       window.clearTimeout(t2);
       window.clearTimeout(t1);
       window.clearTimeout(t0);
+      setCountdown(null);
     };
-  }, [realtimeState?.lastScheduledCountdown]);
+  }, [realtimeState?.lastScheduledCountdown, liveSnapshot?.countdown?.attemptId]);
 
+  const localTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearInterval(localTimer.current), []);
   const triggerSingleShot = (slotOverride?: number) => {
     if (busy || waitingForAccessory) return;
     const targetIndex = slotOverride ?? currentShot;
@@ -310,7 +302,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     let remaining: number = countdownSec;
     setCountdown(remaining);
 
-    const tick = window.setInterval(() => {
+    const tick = localTimer.current = window.setInterval(() => {
       remaining -= 1;
       if (remaining > 0) {
         setCountdown(remaining);
@@ -318,11 +310,15 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         window.clearInterval(tick);
         setCountdown(null);
         performSnapAtIndex(targetIndex);
-        setCurrentShot((prev) => (prev + 1 < takeCount ? prev + 1 : 0));
       }
     }, stepMs);
   };
 
+  const burstTimers = useRef<number[]>([]);
+  useEffect(() => () => burstTimers.current.forEach(timer => window.clearTimeout(timer)), []);
+  const after = (callback: () => void, delay: number) => {
+    burstTimers.current.push(window.setTimeout(callback, delay));
+  };
   const triggerAutoCaptureSequence = () => {
     if (busy || waitingForAccessory) return;
     setIsAutoBursting(true);
@@ -332,18 +328,18 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       setCurrentShot(idx);
       const stepWaitMs = countdownSec === 5 ? 850 : 520;
       setCountdown(3);
-      window.setTimeout(() => setCountdown(2), stepWaitMs);
-      window.setTimeout(() => setCountdown(1), stepWaitMs * 2);
-      window.setTimeout(() => {
+      after(() => setCountdown(2), stepWaitMs);
+      after(() => setCountdown(1), stepWaitMs * 2);
+      after(() => {
         setCountdown(null);
         performSnapAtIndex(idx);
         idx += 1;
         if (idx < takeCount) {
-          window.setTimeout(runStep, 520);
+          after(runStep, 520);
         } else {
           setIsAutoBursting(false);
           setCurrentShot(0);
-          window.setTimeout(() => {
+          after(() => {
             onNavigate('editor');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }, 550);
@@ -872,6 +868,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                     key={fr.id}
                     type="button"
                     onClick={() => setCurrentShot(idx)}
+                    aria-label={`Pose ${idx + 1}, ${fr.imageDataUrl ? "sudah difoto" : "kosong"}`}
                     aria-pressed={currentShot === idx}
                     disabled={busy}
                     className="surface-light"
@@ -927,6 +924,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   </button>
                 ))}
               </div>
+              {myPhoto && !busy && <figure className="pose-review"><img src={myPhoto} alt={'Hasil pose ' + (currentShot + 1)} /><figcaption>Hasil pose {currentShot + 1}</figcaption></figure>}
               <div className="classic-camera-actions">
                 <button
                   type="button"
@@ -939,43 +937,37 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   🪞 {mirror ? 'Mirror ON' : 'Mirror OFF'}
                 </button>
 
-                <button
-                  type="button"
-                  className="btn btn-primary-pop"
-                  style={{ minHeight: 50, padding: '10px 28px', fontSize: '0.96rem' }}
-                  disabled={
-                    busy || waitingForAccessory ||
-                    (mode === 'duo' && (!hostReady || !guestReady))
-                  }
-                  onClick={triggerAutoCaptureSequence}
-                >
-                  {isAutoBursting
-                    ? `📸 Memotret ${currentShot + 1}/${takeCount}...`
-                    : `📷 Ambil Foto (${takeCount}× Otomatis)`}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-lift"
-                  style={{ minHeight: 46, padding: '8px 16px', fontSize: '0.84rem' }}
-                  disabled={
-                    busy || waitingForAccessory ||
-                    (mode === 'duo' && (!hostReady || !guestReady))
-                  }
-                  onClick={() => triggerSingleShot()}
-                >
-                  Jepret Pose #{currentShot + 1}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-secondary-pop"
-                  style={{ minHeight: 46, padding: '8px 18px', fontSize: '0.84rem' }}
-                  disabled={busy}
-                  onClick={() => onNavigate('editor')}
-                >
-                  Lihat Hasil →
-                </button>
+                {!myPhoto && !isDuo && <button type="button" className="btn btn-lift"
+                  disabled={busy || waitingForAccessory || capturedCount > 0} onClick={triggerAutoCaptureSequence}>
+                  Ambil semua otomatis
+                </button>}
+                {(!myPhoto || approved || !isDuo) && (!isDuo || activeRole === 'host') && (
+                  <button type="button" className="btn btn-primary-pop" disabled={busy || waitingForAccessory ||
+                    (isDuo && !(hostReady && guestReady)) || (!isDuo && Boolean(myPhoto) && retakesLeft === 0)}
+                    onClick={() => triggerSingleShot()}>
+                    {approved || myPhoto ? 'Ulang Foto' : 'Jepret Pose ' + (currentShot + 1)}
+                  </button>
+                )}
+                {isDuo && myPhoto && !approved && <button type="button" className="btn btn-lift"
+                  disabled={busy || retakesLeft === 0 || prompt?.status === 'pending'}
+                  onClick={() => realtimeClient.requestRetake(currentShot + 1)}>
+                  {activeRole === 'guest' ? 'Minta ulang ke Host' : 'Ulang Foto'}
+                </button>}
+                {myPhoto && <button type="button" className="btn btn-secondary-pop" disabled={busy || (isDuo && !(photo.imageDataUrl && photo.guestImageDataUrl))}
+                  onClick={() => {
+                    const next = frames.slice(0, takeCount).findIndex(f => !f.imageDataUrl || (isDuo && !f.guestImageDataUrl));
+                    if (next < 0) onNavigate('editor');
+                    else setCurrentShot(next);
+                  }}>
+                  Pakai Foto Ini
+                </button>}
+                {myPhoto && <small role="status">Pose {currentShot + 1} · {retakesLeft} dari 3 pengulangan tersisa</small>}
+                {isDuo && prompt?.status === 'pending' && (activeRole === 'guest'
+                  ? <p role="status">Menunggu persetujuan Host untuk pose {prompt.frameId}.</p>
+                  : <><button className="btn btn-primary-pop" onClick={() => realtimeClient.decideRetake(prompt.requestId, true)}>Setujui ulang Guest</button>
+                      <button className="btn btn-lift" onClick={() => realtimeClient.decideRetake(prompt.requestId, false)}>Pakai foto sebelumnya</button></>)}
+                {isDuo && <p role="status">{approved ? 'Foto ulang disetujui. Tekan Ready di kedua perangkat.' :
+                  activeRole === 'guest' ? 'Setelah Ready, tunggu Host memulai hitung mundur.' : 'Kedua peserta perlu Ready sebelum memotret.'}</p>}
               </div>
             </div>
             <fieldset className="flipbook-choice-panel flipbook-filter-panel" aria-label="Filter warna kamera"
@@ -987,18 +979,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                     selected={selectedFilter === filter.id} onSelect={() => onChangeFilter(filter.id)} />
                 ))}
               </div>
-            </fieldset>
-            <fieldset className="flipbook-choice-panel flipbook-overlay-panel" aria-label="Overlay kamera"
-              disabled={busy || (isDuo && !canSetDuoEffects)}>
-              <h2>Overlay</h2>
-              <div className="flipbook-side-choices">
-                {FLIPBOOK_OVERLAY_EFFECTS.map((effect) => (
-                  <CameraChoice key={effect.id} label={effect.label} overlay={effect.id}
-                    selected={overlay === effect.id} description={effect.description}
-                    onSelect={() => isDuo ? applyDuoEffect({ overlay: effect.id }) : setSoloOverlay(effect.id)} />
-                ))}
-              </div>
-              {isDuo && !canSetDuoEffects && <p className="text-muted flipbook-camera-control-note">Efek kamera Duo diatur oleh Host.</p>}
             </fieldset>
           </div>
         )}
@@ -1027,7 +1007,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   color: '#18181B',
                 }}
               >
-                🔒 Kode: {roomCode}
+                🔒 Kode: {roomCode || "Menunggu room"} · {activeRole === "host" ? "Host" : "Guest"}
               </span>
               <span className="text-muted" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
                 {realtimeState?.webrtcState === 'connected'
@@ -1045,7 +1025,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 type="button"
                 className="btn btn-lift"
                 style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
-                onClick={() => handleCopy('code')}
+                disabled={!roomCode} onClick={() => handleCopy('code')}
               >
                 {copiedType === 'code' ? '✓ Kode Disalin' : '📋 Salin Kode'}
               </button>
@@ -1053,7 +1033,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 type="button"
                 className="btn btn-primary-pop"
                 style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
-                onClick={() => handleCopy('link')}
+                disabled={!roomCode} onClick={() => handleCopy('link')}
               >
                 {copiedType === 'link' ? '✓ Link Disalin!' : '🔗 Salin Link Undangan'}
               </button>
@@ -1088,13 +1068,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   color: '#18181B',
                 }}
                 onClick={() => {
-                  const next = !(hostReady && guestReady);
-                  setHostReady(next);
-                  setGuestReady(next);
-                  realtimeClient.setReady(next);
+                  realtimeClient.setReady(!myReady);
                 }}
               >
-                {hostReady && guestReady ? '✓ Ready (2/2)' : 'Belum Ready'}
+                {myReady ? 'Batalkan Ready' : 'Saya Ready'}
               </button>
             </div>
           </div>

@@ -298,7 +298,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
         )}
 
         {/* Duo Live Guest Retake Approval Banner */}
-        {mode === 'duo' && livePrompt && livePrompt.status === 'pending' && (
+        {mode === 'duo' && realtimeState?.role === 'host' && livePrompt && livePrompt.status === 'pending' && (
           <div
             className="clean-card surface-light"
             style={{
@@ -1019,7 +1019,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                 style={{ minHeight: 42, padding: '6px 14px', fontSize: '0.84rem' }}
                 onClick={() => setShowRetakePicker((v) => !v)}
               >
-                🔄 Retake ({retakesRemaining} sisa)
+                🔄 Ulang foto
               </button>
 
               <button
@@ -1038,7 +1038,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                 style={{ minHeight: 42, padding: '6px 16px', fontSize: '0.84rem' }}
                 onClick={() => onNavigate('export')}
               >
-                ⚙️ Export / JPG →
+                ⚙️ Export / JPG
               </button>
             </div>
 
@@ -1077,7 +1077,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     color: '#18181B',
                   }}
                 >
-                  <span>Pilih pose yang ingin diulang (Sisa {retakesRemaining}×):</span>
+                  <span>Pilih pose yang ingin diulang.</span>
                   <button
                     type="button"
                     className="btn"
@@ -1094,13 +1094,12 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       type="button"
                       className="btn btn-lift"
                       style={{ minHeight: 34, padding: '4px 12px', fontSize: '0.76rem' }}
-                      disabled={retakesRemaining <= 0}
+                      disabled={fr.retakeCount >= 3}
                       onClick={() => {
-                        realtimeClient.requestRetake(fr.id);
                         onRetakeFrame?.(fr.id);
                       }}
                     >
-                      🔄 Ulang {fr.label}
+                      🔄 Ulang {fr.label} · {3 - fr.retakeCount} sisa
                     </button>
                   ))}
                 </div>
@@ -1404,6 +1403,12 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                         Hapus ×
                       </button>
                     </div>
+                    {(['xPct', 'yPct'] as const).map((axis) => (
+                      <label key={axis}>Geser {axis === 'xPct' ? 'horizontal' : 'vertikal'}
+                        <input type="range" min={0} max={100} disabled={isPaused} value={selectedPlaced[axis]}
+                          onChange={(event) => onUpdatePlacedSticker(selectedPlaced.instanceId, { [axis]: Number(event.target.value) })} />
+                      </label>
+                    ))}
                     <label style={{ fontSize: '0.74rem', fontWeight: 700 }}>
                       Ukuran ({Math.round(selectedPlaced.scale * 100)}%)
                       <input
@@ -1421,7 +1426,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                       />
                     </label>
                     <label style={{ fontSize: '0.74rem', fontWeight: 700 }}>
-                      Putar ({selectedPlaced.rotation}°)
+                      Rotasi ({selectedPlaced.rotation}°)
                       <input
                         type="range"
                         min={-180}
@@ -1453,21 +1458,10 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     disabled={isPaused}
                     className="btn btn-lift"
                     style={{ fontSize: '0.78rem', minHeight: 36, padding: '4px 12px' }}
-                    onClick={() => onUndoByOwner('host')}
+                    onClick={() => onUndoByOwner(mode === 'duo' ? realtimeState?.role ?? 'host' : 'host')}
                   >
-                    ↩ Undo Host
+                    Urungkan edit saya
                   </button>
-                  {mode === 'duo' && (
-                    <button
-                      type="button"
-                      disabled={isPaused}
-                      className="btn btn-lift"
-                      style={{ fontSize: '0.78rem', minHeight: 36, padding: '4px 12px' }}
-                      onClick={() => onUndoByOwner('guest')}
-                    >
-                      ↩ Undo Guest
-                    </button>
-                  )}
                 </div>
               </div>
             )}

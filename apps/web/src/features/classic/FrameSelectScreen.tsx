@@ -577,7 +577,7 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
                       flexShrink: 0,
                     }}
                   >
-                    {isSelected ? '✓ Dipilih' : 'Pilih →'}
+                    {isSelected ? '✓ Dipilih' : 'Pilih'}
                   </span>
                 </button>
               );
@@ -609,7 +609,7 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
             style={{ minHeight: 50, padding: '10px 28px', fontSize: '0.96rem' }}
             onClick={() => onNavigate('camera')}
           >
-            Lanjut ke Kamera ({takeCount} Pose) →
+            Lanjut ke Kamera ({takeCount} Pose)
           </button>
         </div>
       </section>

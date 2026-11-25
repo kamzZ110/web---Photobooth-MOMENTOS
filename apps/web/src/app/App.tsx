@@ -1,3 +1,4 @@
+import { isPublicScreen, publicPages, screenForPath } from './publicPages';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_STICKER_LIBRARY,
@@ -11,6 +12,7 @@ import {
   type TemplateLayoutId,
 } from '@momentos/shared';
 import { GlassHeader } from '../components/GlassHeader';
+import { SiteFooter } from '../components/SiteFooter';
 import {
   SeasonalAmbient,
   detectDefaultSeason,
@@ -109,27 +111,60 @@ const INITIAL_FRAMES: CapturedFrame[] = [
   },
 ];
 
-const AMBIENT_SCREENS: ScreenId[] = [
-  'home',
-  'how-it-works',
-  'modes-info',
-  'studio-features',
-  'privacy-info',
-];
+export const App: React.FC<{ initialScreen?: ScreenId }> = ({ initialScreen }) => {
+  const [activeScreen, showScreen] = useState<ScreenId>(() => initialScreen ?? screenForPath(window.location.pathname));
+  const setActiveScreen = (screen: ScreenId) => {
+    const path = isPublicScreen(screen) ? publicPages[screen].path : '/booth/';
+    if (window.location.pathname !== path || window.location.search) {
+      window.history.pushState({ screen }, '', path);
+    } else {
+      window.history.replaceState({ screen }, '', path);
+    }
+    showScreen(screen);
+  };
+  useEffect(() => {
+    const pop = () => showScreen(window.history.state?.screen ?? screenForPath(window.location.pathname));
+    window.addEventListener('popstate', pop);
+    return () => window.removeEventListener('popstate', pop);
+  }, []);
+  useEffect(() => {
+    const page = isPublicScreen(activeScreen) ? publicPages[activeScreen] : null;
+    document.title = page?.title ?? 'Studio Foto | MOMENTOS';
+    const meta = (key: string, content: string, attr = 'name') => {
+      const tag = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`) ?? document.createElement('meta');
+      tag.setAttribute(attr, key);
+      tag.content = content;
+      if (!tag.isConnected) document.head.append(tag);
+    };
+    meta('robots', page ? 'index,follow' : 'noindex,nofollow');
+    meta('description', page?.description ?? 'Sesi studio photobooth pribadi.');
+    meta('og:title', document.title, 'property');
+    meta('og:description', page?.description ?? 'Sesi studio photobooth pribadi.', 'property');
+    const origin = (import.meta as ImportMeta & { env: Record<string, string> }).env.VITE_SITE_URL;
+    let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (origin && page) {
+      canonical ??= document.createElement('link');
+      canonical.rel = 'canonical';
+      canonical.href = new URL(page.path, origin).href;
+      if (!canonical.isConnected) document.head.append(canonical);
+      meta('og:url', canonical.href, 'property');
+    } else {
+      canonical?.remove();
+      document.querySelector('meta[property="og:url"]')?.remove();
+    }
+  }, [activeScreen]);
 
-export const App: React.FC = () => {
-  const [activeScreen, setActiveScreen] = useState<ScreenId>('home');
   const [mode, setMode] = useState<BoothMode>('solo');
   const [isNight, setIsNight] = useState<boolean>(false);
   const [season] = useState(() => detectDefaultSeason());
   const [roomState, setRoomState] = useState<RoomConnectionState>('connected');
-  const [takeCount, setTakeCount] = useState<number>(3);
+  const [takeCount, setTakeCount] = useState<number>(4);
   const [selectedFilter, setSelectedFilter] = useState<PhotoFilterId>('normal');
   const [frames, setFrames] = useState<CapturedFrame[]>(INITIAL_FRAMES);
   const [retakesRemaining, setRetakesRemaining] = useState<number>(3);
   const [layout, setLayout] = useState<TemplateLayoutId>('strip-1x4');
   const [stripTint, setStripTint] = useState<string>('#FFFFFF');
-  const [caption, setCaption] = useState<string>('Nov 14, 2026 12:02pm');
+  const [caption, setCaption] = useState<string>('');
   const [stickers, setStickers] = useState<StickerItem[]>(
     DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s, active: false }))
   );
@@ -138,6 +173,12 @@ export const App: React.FC = () => {
     realtimeClient.getState()
   );
   const inviteHandled = useRef(false);
+  const [invite, setInvite] = useState<{ code: string; flipbook: boolean } | null>(null);
+  useEffect(() => {
+    if (!isPublicScreen(activeScreen)) realtimeClient.ensureTransport();
+  }, [activeScreen]);
+  const currentRoom = useRef<string | null>(null);
+  const [cameraPose, setCameraPose] = useState(0);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isNight ? 'night' : 'day');
@@ -155,14 +196,24 @@ export const App: React.FC = () => {
       const saved = realtimeClient.getSavedSession();
       setMode('duo');
       if (realtimeState.transport !== 'websocket' || saved?.code !== code) realtimeClient.joinRoom(code, 'Guest');
-      setActiveScreen(flow === 'flipbook' ? 'flipbook' : 'camera');
+      setInvite({ code, flipbook: flow === 'flipbook' });
+      setActiveScreen('room');
     }
   }, [realtimeState.transport]);
+
+  useEffect(() => {
+    if (invite && realtimeState.snapshot?.code === invite.code) {
+      setActiveScreen(invite.flipbook ? 'flipbook' : 'camera');
+      setInvite(null);
+    } else if (invite && realtimeState.lastError) setInvite(null);
+  }, [invite, realtimeState.snapshot?.code, realtimeState.lastError]);
 
   useEffect(() => {
     return realtimeClient.subscribe((next) => {
       setRealtimeState(next);
       if (next.snapshot) {
+        const newRoom = currentRoom.current !== next.snapshot.code;
+        currentRoom.current = next.snapshot.code;
         setRoomState(next.snapshot.connectionState);
         setTakeCount(next.snapshot.takeCount);
         setSelectedFilter(next.snapshot.selectedFilter);
@@ -171,13 +222,14 @@ export const App: React.FC = () => {
 
         if (next.snapshot.syncedFrames && next.snapshot.syncedFrames.length > 0) {
           setFrames((prev) =>
-            prev.map((fr, idx) => {
+            (newRoom ? INITIAL_FRAMES : prev).map((fr, idx) => {
               const synced = next.snapshot?.syncedFrames.find(
                 (sf) => sf.frameIndex === idx
               );
               if (!synced) return fr;
               return {
                 ...fr,
+                retakeCount: synced.retakes?.[next.role ?? 'host'] ?? fr.retakeCount,
                 imageDataUrl: synced.hostDataUrl ?? fr.imageDataUrl,
                 guestImageDataUrl: synced.guestDataUrl ?? fr.guestImageDataUrl,
               };
@@ -197,8 +249,19 @@ export const App: React.FC = () => {
     });
   }, []);
 
-  const handleStartMode = (nextMode: BoothMode, targetScreen: ScreenId) => {
+  const startFresh = (nextMode: BoothMode) => {
+    if (realtimeClient.getState().snapshot) realtimeClient.leaveRoom();
+    currentRoom.current = null;
     setMode(nextMode);
+    setFrames(INITIAL_FRAMES);
+    setCameraPose(0);
+    setRetakesRemaining(3);
+    setPlacedStickers([]);
+    setStickers(DEFAULT_STICKER_LIBRARY.map(s => ({ ...s, active: false })));
+    setCaption('');
+  };
+  const handleStartMode = (nextMode: BoothMode, targetScreen: ScreenId) => {
+    startFresh(nextMode);
     setActiveScreen(targetScreen);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -239,7 +302,7 @@ export const App: React.FC = () => {
         idx === frameIndex
           ? targetRole === 'guest'
             ? { ...f, guestImageDataUrl: dataUrl }
-            : { ...f, imageDataUrl: dataUrl }
+            : { ...f, imageDataUrl: dataUrl, retakeCount: mode === 'solo' && f.imageDataUrl ? f.retakeCount + 1 : f.retakeCount }
           : f
       )
     );
@@ -249,20 +312,8 @@ export const App: React.FC = () => {
   };
 
   const handleRetakeFrame = (frameId: number) => {
-    if (retakesRemaining <= 0) return;
-    const altPoses = ['😜✌️', '🥳✨', '😎🫶', '🤩🔥'];
-    setFrames((prev) =>
-      prev.map((f) =>
-        f.id === frameId
-          ? {
-              ...f,
-              hostPose: altPoses[(f.retakeCount + frameId) % altPoses.length],
-              retakeCount: f.retakeCount + 1,
-            }
-          : f
-      )
-    );
-    setRetakesRemaining((prev) => Math.max(0, prev - 1));
+    setCameraPose(frameId - 1);
+    setActiveScreen('camera');
   };
 
   const handleAddPlacedSticker = (stk: StickerItem): string => {
@@ -303,7 +354,7 @@ export const App: React.FC = () => {
 
   const handleUndoByOwner = (owner: 'host' | 'guest') => {
     if (realtimeState.snapshot) {
-      realtimeClient.sendPersonalUndo(owner);
+      realtimeClient.sendPersonalUndo();
       return;
     }
     setPlacedStickers((prev) => {
@@ -320,10 +371,14 @@ export const App: React.FC = () => {
         Lewati ke Konten Utama
       </a>
 
+      {activeScreen === 'home' && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        '@context': 'https://schema.org', '@type': 'WebApplication', name: 'MOMENTOS', inLanguage: 'id',
+        applicationCategory: 'MultimediaApplication', operatingSystem: 'Web', description: publicPages.home.description,
+      }).replaceAll('<', '\\u003c') }} />}
       <SeasonalAmbient
         season={season}
         isNight={isNight}
-        enabled={AMBIENT_SCREENS.includes(activeScreen)}
+        blurred={activeScreen !== 'home'}
       />
 
       <GlassHeader
@@ -384,7 +439,7 @@ export const App: React.FC = () => {
           {activeScreen === 'room' && (
             <RoomScreen
               mode={mode}
-              onChangeMode={setMode}
+              onChangeMode={startFresh}
               roomState={roomState}
               onChangeRoomState={setRoomState}
               realtimeState={realtimeState}
@@ -415,6 +470,7 @@ export const App: React.FC = () => {
               layout={layout}
               onChangeLayout={handleChangeLayout}
               frames={frames}
+              initialPose={cameraPose}
               onCaptureFrame={handleCaptureFrame}
               realtimeState={realtimeState}
               onNavigate={setActiveScreen}
@@ -424,12 +480,9 @@ export const App: React.FC = () => {
           {activeScreen === 'review' && (
             <ReviewScreen
               mode={mode}
-              isNight={isNight}
               takeCount={takeCount}
               frames={frames}
-              retakesRemaining={retakesRemaining}
               onRetakeFrame={handleRetakeFrame}
-              realtimeState={realtimeState}
               onNavigate={setActiveScreen}
             />
           )}
@@ -488,6 +541,7 @@ export const App: React.FC = () => {
           )}
         </main>
       </div>
+      <SiteFooter onSelectScreen={setActiveScreen} />
     </>
   );
 };

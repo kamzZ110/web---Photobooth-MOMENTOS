@@ -445,6 +445,7 @@ export interface RoomParticipant {
 }
 
 export interface ScheduledCountdown {
+  retakeRole?: ParticipantRole;
   attemptId: string;
   takeNumber: number;
   startedAtServer: number;
@@ -460,6 +461,7 @@ export interface RetakePromptState {
 }
 
 export interface SyncedFrameMedia {
+  retakes?: Partial<Record<ParticipantRole, number>>;
   frameIndex: number;
   hostDataUrl?: string;
   guestDataUrl?: string;
@@ -591,7 +593,7 @@ export type ClientToServerMessage =
   | {
       type: 'capture:frame-sync';
       frameIndex: number;
-      dataUrl: string;
+      dataUrl?: string;
     }
   | {
       type: 'retake:request';
@@ -620,7 +622,6 @@ export type ClientToServerMessage =
     }
   | {
       type: 'editor:personal-undo';
-      actor?: ParticipantRole;
     }
   | {
       type: 'webrtc:signal';
@@ -628,6 +629,7 @@ export type ClientToServerMessage =
     };
 
 export type ServerToClientMessage =
+  | { type: 'room:turn'; urls: string; username: string; credential: string }
   | {
       type: 'room:joined';
       code: string;
@@ -668,3 +670,6 @@ export type ServerToClientMessage =
         | 'BAD_REQUEST';
       message: string;
     };
+export const FLIPBOOK_CAPTURE_DURATION_MS = 5000;
+export const FLIPBOOK_CAPTURE_FPS = 20;
+export const FLIPBOOK_CAPTURE_FRAME_COUNT = FLIPBOOK_CAPTURE_DURATION_MS / 1000 * FLIPBOOK_CAPTURE_FPS;

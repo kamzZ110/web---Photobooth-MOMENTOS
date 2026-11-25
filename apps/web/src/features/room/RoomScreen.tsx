@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import type {
-  BoothMode,
-  RoomConnectionState,
-  ScreenId,
+import React, { useEffect, useState } from 'react';
+import {
+  FLIPBOOK_CAPTURE_FRAME_COUNT,
+  type BoothMode,
+  type RoomConnectionState,
+  type ScreenId,
 } from '@momentos/shared';
 import { MiniCameraStripIcon } from '../../components/InstantCameraRig';
 import {
@@ -34,6 +35,12 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
 }) => {
   const [guestInputCode, setGuestInputCode] = useState('');
 
+  const [pending, setPending] = useState<'host' | 'guest' | null>(null);
+  useEffect(() => {
+    if (!pending) return;
+    if (realtimeState.lastError) setPending(null);
+    else if (realtimeState.role === pending && realtimeState.snapshot) onNavigate(pending === 'host' ? 'frame-select' : 'camera');
+  }, [pending, realtimeState.role, realtimeState.snapshot, realtimeState.lastError]);
   const liveSnapshot = realtimeState.snapshot;
   const savedSession = realtimeClient.getSavedSession();
 
@@ -55,16 +62,16 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
 
   const handleStartDuoAsHost = () => {
     onChangeMode('duo');
+    setPending('host');
     realtimeClient.createRoom({ displayName: 'Host', mode: 'duo' });
-    onNavigate('frame-select');
   };
 
   const handleJoinGuest = () => {
     const code = guestInputCode.trim().toUpperCase();
     if (!code) return;
     onChangeMode('duo');
+    setPending('guest');
     realtimeClient.joinRoom(code, 'Guest');
-    onNavigate('camera');
   };
 
   return (
@@ -147,7 +154,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
                 onNavigate('camera');
               }}
             >
-              Pulihkan Sesi →
+              Pulihkan Sesi
             </button>
           </div>
         )}
@@ -219,7 +226,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
               style={{ width: '100%' }}
               onClick={handleStartSolo}
             >
-              Mulai Solo →
+              Mulai Solo
             </button>
           </div>
 
@@ -271,9 +278,9 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
               type="button"
               className="btn btn-secondary-pop"
               style={{ width: '100%' }}
-              onClick={handleStartDuoAsHost}
+              disabled={Boolean(pending) || realtimeState.transport === 'connecting'} onClick={handleStartDuoAsHost}
             >
-              Mulai Duo (Jadi Host) →
+              Buat Room Duo (Host)
             </button>
           </div>
 
@@ -304,7 +311,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
                     color: '#18181B',
                   }}
                 >
-                  🎞️ Gerak · 60 Frame
+                  🎞️ Gerak · {FLIPBOOK_CAPTURE_FRAME_COUNT} Frame
                 </span>
                 <MiniCameraStripIcon accentColor="#B6834D" size={34} />
               </div>
@@ -323,7 +330,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
               style={{ width: '100%', background: '#FFFFFF', color: '#18181B' }}
               onClick={() => onNavigate('flipbook')}
             >
-              Buka Flipbook →
+              Buka Flipbook
             </button>
           </div>
         </div>
@@ -342,7 +349,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
         >
           <div style={{ minWidth: 200 }}>
             <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>
-              Punya Kode Undangan Room?
+              Masuk dengan kode (Guest)
             </div>
             <div className="text-muted" style={{ fontSize: '0.82rem' }}>
               Masukkan kode dari temanmu untuk langsung bergabung ke kamera Duo sebagai Guest.
@@ -362,7 +369,7 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
             <input
               id="guest-code-input"
               type="text"
-              placeholder="Contoh: MMT-4829"
+              placeholder="Contoh: MMT-A24EF896B1"
               aria-label="Masukkan kode room"
               value={guestInputCode}
               onChange={(e) => setGuestInputCode(e.target.value.toUpperCase())}
@@ -392,14 +399,15 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
               type="button"
               className="btn btn-primary-pop"
               style={{ minHeight: 42, padding: '8px 20px', fontSize: '0.86rem' }}
-              disabled={!guestInputCode.trim()}
+              disabled={!guestInputCode.trim() || Boolean(pending) || realtimeState.transport === 'connecting'}
               onClick={handleJoinGuest}
             >
-              Gabung →
+              Gabung
             </button>
           </div>
         </div>
 
+        {pending && <p role="status">{pending === 'host' ? 'Membuat room sebagai Host…' : 'Mencari room untuk Guest…'}</p>}
         {/* Subtle Realtime Transport Footer */}
         <div
           style={{
@@ -416,8 +424,8 @@ export const RoomScreen: React.FC<RoomScreenProps> = ({
           <span>
             Sinyal Room:{' '}
             {realtimeState.transport === 'websocket'
-              ? '🟢 Server WebSocket (:4000)'
-              : '🟡 Multi-Tab Lokal (BroadcastChannel)'}
+              ? '🟢 Server Duo terhubung'
+              : '🟡 Mode lokal di perangkat ini'}
           </span>
           {liveSnapshot && (
             <>

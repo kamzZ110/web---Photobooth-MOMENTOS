@@ -223,6 +223,29 @@ function drawAnimation(ctx: CanvasRenderingContext2D, effect: EffectDemo, progre
   }
 }
 
+export interface GestureVisual {
+  effect: EffectDemo;
+  progress: number;
+  anchor?: { x: number; y: number; scale: number };
+}
+
+// Paint the same animation over camera pixels, without the illustration backdrop.
+export function drawLiveGestureEffect(
+  ctx: CanvasRenderingContext2D, visual: GestureVisual | null, width: number, height: number,
+) {
+  if (!visual) return;
+  ctx.save();
+  ctx.scale(width / DEMO_WIDTH, height / DEMO_HEIGHT);
+  if (visual.anchor && visual.effect.mode === 'solo') {
+    const { x, y, scale } = visual.anchor;
+    ctx.translate(x * DEMO_WIDTH, y * DEMO_HEIGHT);
+    ctx.scale(scale, scale);
+    ctx.translate(-320, -194);
+  }
+  drawAnimation(ctx, visual.effect, visual.progress);
+  ctx.restore();
+}
+
 export function drawEffectDemo(
   ctx: CanvasRenderingContext2D,
   effect: EffectDemo,

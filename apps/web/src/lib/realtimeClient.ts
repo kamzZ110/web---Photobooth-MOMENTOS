@@ -68,7 +68,7 @@ function createInitialLocalEditorState(): CollaborativeEditorState {
   return {
     editorVersion: 1,
     stripTint: '#FFFFFF',
-    caption: 'Nov 14, 2026 12:02pm',
+    caption: '',
     stickers: DEFAULT_STICKER_LIBRARY.map((s) => ({ ...s, active: false })),
     placedStickers: [],
     history: [],
@@ -78,6 +78,7 @@ function createInitialLocalEditorState(): CollaborativeEditorState {
 }
 
 class MomentosRealtimeClient {
+  private turnServer: RTCIceServer | null = null;
   private ws: WebSocket | null = null;
   private bc: BroadcastChannel | null = null;
   private listeners = new Set<Listener>();
@@ -110,15 +111,16 @@ class MomentosRealtimeClient {
   };
 
   constructor() {
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      this.bc = new BroadcastChannel('momentos_duo_room_bus_v1');
-      this.bc.onmessage = (event) => {
-        this.handleBroadcastMessage(event.data);
-      };
-    }
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && (window.location.pathname.startsWith('/booth') || new URLSearchParams(window.location.search).has('room'))) {
       this.connectWebSocket();
     }
+  }
+
+  private openLocalRoom(code: string) {
+    this.bc?.close();
+    if (typeof BroadcastChannel === 'undefined') return;
+    this.bc = new BroadcastChannel('momentos-room-' + code);
+    this.bc.onmessage = event => this.handleBroadcastMessage(event.data);
   }
 
   public getState(): RealtimeClientState {
@@ -164,6 +166,10 @@ class MomentosRealtimeClient {
     } catch {
       // ignore storage quota errors
     }
+  }
+
+  public ensureTransport(): void {
+    if (!this.ws && !this.bc) this.connectWebSocket();
   }
 
   public retryWebSocketConnection(): void {
@@ -260,13 +266,14 @@ class MomentosRealtimeClient {
       type: 'room:create',
       displayName: params?.displayName ?? 'Host',
       mode: params?.mode ?? 'duo',
-      takeCount: params?.takeCount ?? 3,
+      takeCount: params?.takeCount ?? 4,
       selectedFilter: params?.selectedFilter ?? 'normal',
     });
 
     if (!sent) {
       const now = Date.now();
-      const code = `MMT-${Math.floor(1000 + Math.random() * 9000)}`;
+      const code = `MMT-${crypto.randomUUID().replaceAll('-', '').slice(0, 10).toUpperCase()}`;
+      this.openLocalRoom(code);
       const participantId = `host-${now}`;
       const rejoinToken = `tok-host-${now}`;
       const mode = params?.mode ?? 'duo';
@@ -279,7 +286,7 @@ class MomentosRealtimeClient {
         createdAt: now,
         expiresAt: now + 60 * 60 * 1000,
         idleDestroyAt: null,
-        takeCount: params?.takeCount ?? 3,
+        takeCount: params?.takeCount ?? 4,
         selectedFilter: params?.selectedFilter ?? 'normal',
         layout: 'strip-1x4',
         retakesRemaining: 3,
@@ -318,6 +325,7 @@ class MomentosRealtimeClient {
   public joinRoom(rawCode: string, displayName = 'Guest'): void {
     const code = rawCode.trim().toUpperCase();
     if (!code) return;
+    this.patchState({ lastError: null });
     const sent = this.sendWs({
       type: 'room:join',
       code,
@@ -325,6 +333,11 @@ class MomentosRealtimeClient {
     });
 
     if (!sent) {
+      this.openLocalRoom(code);
+      const channel = this.bc;
+      window.setTimeout(() => {
+        if (this.bc === channel && !this.state.role) this.patchState({ lastError: 'Room lokal tidak ditemukan. Periksa kode atau sambungkan server Duo.' });
+      }, 4000);
       this.bc?.postMessage({
         type: 'bc:join-request',
         code,
@@ -349,6 +362,9 @@ class MomentosRealtimeClient {
   }
 
   public leaveRoom(): void {
+    this.bc?.close();
+    this.bc = null;
+    this.turnServer = null;
     this.sendWs({ type: 'room:leave' });
     this.cleanupWebRtc();
     this.saveSession(null);
@@ -534,13 +550,7 @@ class MomentosRealtimeClient {
       .filter(Boolean);
 
     const iceServers: RTCIceServer[] = stunList.map((urls) => ({ urls }));
-    if (VITE_ENV.VITE_TURN_URL) {
-      iceServers.push({
-        urls: VITE_ENV.VITE_TURN_URL,
-        username: VITE_ENV.VITE_TURN_USERNAME,
-        credential: VITE_ENV.VITE_TURN_CREDENTIAL,
-      });
-    }
+    if (this.turnServer) iceServers.push(this.turnServer);
 
     return {
       iceServers,
@@ -607,8 +617,16 @@ class MomentosRealtimeClient {
   }
 
   private handleDataChannelChunk(msg: DataChannelChunkMessage): void {
+    if (!msg || msg.role === this.state.role || !['host', 'guest'].includes(msg.role) ||
+        !Number.isInteger(msg.frameIndex) || msg.frameIndex < 0 || msg.frameIndex >= 8 ||
+        typeof msg.transferId !== 'string' || msg.transferId.length > 100) return;
     if (msg.type === 'frame-chunk' && msg.chunk !== undefined && msg.chunkIndex !== undefined) {
+      if (typeof msg.chunk !== 'string' || msg.chunk.length > CHUNK_SIZE ||
+          !Number.isInteger(msg.chunkIndex) || !Number.isInteger(msg.totalChunks) ||
+          !msg.totalChunks || msg.totalChunks > Math.ceil(MAX_FRAME_DATA_URL_LENGTH / CHUNK_SIZE) ||
+          msg.chunkIndex < 0 || msg.chunkIndex >= msg.totalChunks) return;
       let item = this.incomingTransfers.get(msg.transferId);
+      if (!item && this.incomingTransfers.size >= 16) return;
       if (!item) {
         item = {
           role: msg.role,
@@ -624,7 +642,8 @@ class MomentosRealtimeClient {
       if (item) {
         const dataUrl = item.chunks.join('');
         this.incomingTransfers.delete(msg.transferId);
-        this.applyLocalSyncedFrame(item.role, item.frameIndex, dataUrl);
+        if (Object.keys(item.chunks).length === item.totalChunks && dataUrl.length <= MAX_FRAME_DATA_URL_LENGTH &&
+            /^data:image\/(png|jpeg);base64,/.test(dataUrl)) this.applyLocalSyncedFrame(item.role, item.frameIndex, dataUrl);
       }
     }
   }
@@ -750,6 +769,7 @@ class MomentosRealtimeClient {
       const countdown: ScheduledCountdown = {
         attemptId: `att-${now}`,
         takeNumber,
+        retakeRole: this.state.snapshot?.retakePrompt?.status === 'approved' ? this.state.snapshot.retakePrompt.requestedBy : undefined,
         startedAtServer: now,
         targetCaptureAtServer: now + 3000,
         durationMs: 3000,
@@ -793,6 +813,9 @@ class MomentosRealtimeClient {
         frameIndex,
       };
       this.dc.send(JSON.stringify(doneMsg));
+      this.sendWs({ type: 'capture:frame-sync', frameIndex });
+      this.applyLocalSyncedFrame(role, frameIndex, dataUrl);
+      return;
     }
 
     // 2. Sync via Server or BroadcastChannel
@@ -829,12 +852,16 @@ class MomentosRealtimeClient {
     } else {
       entry.guestDataUrl = dataUrl;
     }
+    if (this.state.transport === 'broadcast-fallback') {
+      entry.retakes = { ...entry.retakes, [role]: (entry.retakes?.[role] ?? -1) + 1 };
+    }
     entry.updatedAt = Date.now();
 
     const next: AuthoritativeRoomSnapshot = {
       ...this.state.snapshot,
       version: this.state.snapshot.version + 1,
       syncedFrames,
+      retakePrompt: this.state.transport === 'broadcast-fallback' ? null : this.state.snapshot.retakePrompt,
     };
     this.patchState({ snapshot: next });
   }
@@ -851,9 +878,7 @@ class MomentosRealtimeClient {
       const next: AuthoritativeRoomSnapshot = {
         ...this.state.snapshot,
         version: this.state.snapshot.version + 1,
-        retakesRemaining: approvedImmediate
-          ? Math.max(0, this.state.snapshot.retakesRemaining - 1)
-          : this.state.snapshot.retakesRemaining,
+        participants: this.state.snapshot.participants.map(p => approvedImmediate ? { ...p, ready: false } : p),
         retakePrompt: {
           requestId: `retake-${Date.now()}`,
           frameId,
@@ -877,9 +902,7 @@ class MomentosRealtimeClient {
       const next: AuthoritativeRoomSnapshot = {
         ...this.state.snapshot,
         version: this.state.snapshot.version + 1,
-        retakesRemaining: approved
-          ? Math.max(0, this.state.snapshot.retakesRemaining - 1)
-          : this.state.snapshot.retakesRemaining,
+        participants: this.state.snapshot.participants.map(p => approved ? { ...p, ready: false } : p),
         retakePrompt: {
           ...this.state.snapshot.retakePrompt,
           status: approved ? 'approved' : 'rejected',
@@ -926,11 +949,10 @@ class MomentosRealtimeClient {
     }
   }
 
-  public sendPersonalUndo(actor?: ParticipantRole): void {
-    const targetActor: ParticipantRole = actor ?? this.state.role ?? 'host';
+  public sendPersonalUndo(): void {
+    const targetActor: ParticipantRole = this.state.role ?? 'host';
     const sent = this.sendWs({
       type: 'editor:personal-undo',
-      actor: targetActor,
     });
 
     if (!sent && this.state.snapshot) {
@@ -1146,7 +1168,13 @@ class MomentosRealtimeClient {
 
   private handleServerMessage(msg: ServerToClientMessage): void {
     switch (msg.type) {
+      case 'room:turn': {
+        this.turnServer = { urls: msg.urls, username: msg.username, credential: msg.credential };
+        break;
+      }
       case 'room:joined': {
+        this.bc?.close();
+        this.bc = null;
         this.saveSession({
           code: msg.code,
           rejoinToken: msg.rejoinToken,

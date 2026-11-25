@@ -1,63 +1,81 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { faceAnchorsFromLandmarks, hasCameraFrame, type FaceAnchors, type Point } from '../../lib/cameraAccessories';
 
-// Pin the JavaScript and WASM to the same release. Load only on the camera step.
 const VISION_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35';
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
-type Landmarker = {
-  detectForVideo(image: HTMLCanvasElement, timestamp: number): { faceLandmarks: Point[][] };
+interface Category { categoryName: string; score: number }
+interface FaceResult { faceLandmarks: Point[][]; faceBlendshapes?: { categories: Category[] }[] }
+interface HandResult { landmarks: Point[][] }
+interface Landmarker<T> {
+  detectForVideo(image: HTMLCanvasElement, timestamp: number): T;
   close(): void;
-};
-
+}
+interface TaskOptions {
+  baseOptions: { modelAssetPath: string; delegate: 'CPU' };
+  runningMode: 'VIDEO';
+}
 type VisionModule = {
   FilesetResolver: { forVisionTasks(url: string): Promise<unknown> };
-  FaceLandmarker: { createFromOptions(fileset: unknown, options: {
-    baseOptions: { modelAssetPath: string; delegate: 'CPU' };
-    runningMode: 'VIDEO';
-    numFaces: number;
-  }): Promise<Landmarker> };
+  FaceLandmarker: {
+    createFromOptions(fileset: unknown, options: TaskOptions & {
+      numFaces: number; outputFaceBlendshapes: boolean;
+    }): Promise<Landmarker<FaceResult>>;
+  };
+  HandLandmarker: {
+    createFromOptions(fileset: unknown, options: TaskOptions & { numHands: number }): Promise<Landmarker<HandResult>>;
+  };
 };
 
 let visionAssets: Promise<{ vision: VisionModule; fileset: unknown }> | undefined;
 let previousInitialization: Promise<void> = Promise.resolve();
 
-function createLandmarker(isActive: () => boolean): Promise<Landmarker | null> {
+function createTask<T>(isActive: () => boolean, create: (vision: VisionModule, fileset: unknown) => Promise<Landmarker<T>>) {
   const initialization = previousInitialization.then(async () => {
     if (!isActive()) return null;
     visionAssets ??= (async () => {
-      const moduleUrl = `${VISION_URL}/vision_bundle.mjs`;
+      const moduleUrl = VISION_URL + '/vision_bundle.mjs';
       const vision = await import(/* @vite-ignore */ moduleUrl) as VisionModule;
-      return { vision, fileset: await vision.FilesetResolver.forVisionTasks(`${VISION_URL}/wasm`) };
+      return { vision, fileset: await vision.FilesetResolver.forVisionTasks(VISION_URL + '/wasm') };
     })().catch((error: unknown) => {
       visionAssets = undefined;
       throw error;
     });
     const { vision, fileset } = await visionAssets;
-    if (!isActive()) return null;
-    return vision.FaceLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' },
-      runningMode: 'VIDEO',
-      numFaces: 1,
-    });
+    return isActive() ? create(vision, fileset) : null;
   });
   previousInitialization = initialization.then(() => undefined, () => undefined);
   return initialization;
 }
 
-type TrackingStatus = 'idle' | 'loading' | 'searching' | 'tracking' | 'unavailable';
-const TRACKING_INTERVAL_MS = 75;
-const MAX_LANDMARK_AGE_MS = 300;
+export type TrackingStatus = 'idle' | 'loading' | 'searching' | 'tracking' | 'unavailable';
+
+export interface LandmarkSample<T> {
+  result: T;
+  aspect: number;
+  time: number;
+}
+
+const TRACKING_INTERVAL_MS = 85;
+const MAX_LANDMARK_AGE_MS = 350;
 const TRACKING_LONG_EDGE = 480;
 
-export function useFaceAccessoryTracking(
-  videoRef: RefObject<HTMLVideoElement>, enabled: boolean, source: MediaStream | null = null,
+function useVideoLandmarks<T>(
+  videoRef: RefObject<HTMLVideoElement>, enabled: boolean, source: MediaStream | null,
+  create: (vision: VisionModule, fileset: unknown) => Promise<Landmarker<T>>,
+  onResult: (result: T | null) => boolean,
+  retry: number,
 ) {
-  const face = useRef<FaceAnchors | null>(null);
+  const sample = useRef<LandmarkSample<T> | null>(null);
   const [status, setStatus] = useState<TrackingStatus>('idle');
+  // The result callback updates references only, without rebuilding a loaded model.
+  const processResult = useRef(onResult);
+  processResult.current = onResult;
 
   useEffect(() => {
-    face.current = null;
+    sample.current = null;
+    processResult.current(null);
     if (!enabled) {
       setStatus('idle');
       return;
@@ -65,12 +83,11 @@ export function useFaceAccessoryTracking(
 
     let active = true;
     let animationFrame = 0;
-    let tracker: Landmarker | null = null;
+    let tracker: Landmarker<T> | null = null;
     let lastVideoTime = -1;
     let lastFrameAt = -Infinity;
+    let present = false;
     let lastStatus: TrackingStatus = 'loading';
-    // Measure on a smaller, uncropped copy of this camera only. Normalized anchors
-    // are projected into the actual preview/capture crop at paint time.
     const input = document.createElement('canvas');
     const inputContext = input.getContext('2d');
     if (!inputContext) {
@@ -80,12 +97,17 @@ export function useFaceAccessoryTracking(
     setStatus(lastStatus);
 
     const updateStatus = (next: TrackingStatus) => {
-      if (next !== lastStatus) {
+      if (lastStatus !== next) {
         lastStatus = next;
         setStatus(next);
       }
     };
-    const loadingTimeout = window.setTimeout(() => updateStatus('unavailable'), 15000);
+    const clearSample = () => {
+      sample.current = null;
+      processResult.current(null);
+      present = false;
+    };
+    const loadingTimeout = window.setTimeout(() => updateStatus('unavailable'), 20000);
 
     const track = (now: number) => {
       const video = videoRef.current;
@@ -100,26 +122,27 @@ export function useFaceAccessoryTracking(
             if (input.width !== width) input.width = width;
             if (input.height !== height) input.height = height;
             inputContext.drawImage(video, 0, 0, width, height);
-            const points = tracker.detectForVideo(input, now).faceLandmarks[0];
-            face.current = points ? faceAnchorsFromLandmarks(points) : null;
+            const result = tracker.detectForVideo(input, now);
+            sample.current = { result, aspect: width / height, time: now };
+            present = processResult.current(result);
           } else if (now - lastFrameAt > MAX_LANDMARK_AGE_MS) {
-            face.current = null;
+            clearSample();
           }
         } else {
-          face.current = null;
+          clearSample();
           lastVideoTime = -1;
         }
-        updateStatus(face.current ? 'tracking' : 'searching');
+        updateStatus(present ? 'tracking' : 'searching');
         animationFrame = window.requestAnimationFrame(track);
       } catch {
-        face.current = null;
+        clearSample();
         tracker?.close();
         tracker = null;
         updateStatus('unavailable');
       }
     };
 
-    void createLandmarker(() => active).then((result) => {
+    void createTask(() => active, create).then(result => {
       if (!active) {
         result?.close();
         return;
@@ -138,9 +161,39 @@ export function useFaceAccessoryTracking(
       window.clearTimeout(loadingTimeout);
       window.cancelAnimationFrame(animationFrame);
       tracker?.close();
-      face.current = null;
+      clearSample();
     };
-  }, [enabled, source, videoRef]);
+  }, [enabled, source, videoRef, create, retry]);
 
-  return { face, status };
+  return { sample, status };
+}
+
+const createFace = (vision: VisionModule, fileset: unknown) => vision.FaceLandmarker.createFromOptions(fileset, {
+  baseOptions: { modelAssetPath: FACE_MODEL, delegate: 'CPU' },
+  runningMode: 'VIDEO',
+  numFaces: 1,
+  outputFaceBlendshapes: true,
+});
+const createHand = (vision: VisionModule, fileset: unknown) => vision.HandLandmarker.createFromOptions(fileset, {
+  baseOptions: { modelAssetPath: HAND_MODEL, delegate: 'CPU' },
+  runningMode: 'VIDEO',
+  numHands: 2,
+});
+
+export function useFaceAccessoryTracking(
+  videoRef: RefObject<HTMLVideoElement>, enabled: boolean, source: MediaStream | null = null, retry = 0,
+) {
+  const face = useRef<FaceAnchors | null>(null);
+  const tracking = useVideoLandmarks(videoRef, enabled, source, createFace, result => {
+    const landmarks = result?.faceLandmarks[0];
+    face.current = landmarks ? faceAnchorsFromLandmarks(landmarks) : null;
+    return !!landmarks;
+  }, retry);
+  return { face, ...tracking };
+}
+
+export function useHandTracking(
+  videoRef: RefObject<HTMLVideoElement>, enabled: boolean, source: MediaStream | null = null, retry = 0,
+) {
+  return useVideoLandmarks(videoRef, enabled, source, createHand, result => Boolean(result?.landmarks.length), retry);
 }

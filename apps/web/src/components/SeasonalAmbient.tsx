@@ -18,7 +18,7 @@ export function detectDefaultSeason(date = new Date()): SeasonPreset {
 
 interface SeasonalAmbientProps {
   season?: SeasonPreset;
-  enabled: boolean;
+  blurred: boolean;
   isNight?: boolean;
 }
 
@@ -53,13 +53,13 @@ interface StarParticle {
 
 export const SeasonalAmbient: React.FC<SeasonalAmbientProps> = ({
   season = detectDefaultSeason(),
-  enabled,
+  blurred,
   isNight = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (!enabled || (!isNight && season === 'off')) return;
+    if (!isNight && season === 'off') return;
 
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (mediaQuery.matches) return;
@@ -364,9 +364,9 @@ export const SeasonalAmbient: React.FC<SeasonalAmbientProps> = ({
       window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [season, enabled, isNight]);
+  }, [season, isNight]);
 
-  if (!enabled || (!isNight && season === 'off')) return null;
+  if (!isNight && season === 'off') return null;
 
   return (
     <canvas
@@ -377,6 +377,7 @@ export const SeasonalAmbient: React.FC<SeasonalAmbientProps> = ({
         inset: 0,
         zIndex: 1,
         pointerEvents: 'none',
+        filter: blurred ? 'blur(3px)' : undefined,
       }}
     />
   );

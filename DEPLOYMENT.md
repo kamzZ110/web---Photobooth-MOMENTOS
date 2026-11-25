@@ -7,7 +7,7 @@ Dokumen ini menjelaskan arsitektur produksi, konfigurasi variabel lingkungan (`.
 ## 1. Arsitektur Produksi (Zero-Database / Stateless Privacy-First)
 
 - **Frontend (`apps/web`)**: Aplikasi React + TypeScript + Vite yang menangani kamera `getUserMedia`, *rendering* komposit Canvas 2D (`.PNG`, `.JPG`, `.GIF`, `.MP4`/`.WEBM`), dan koneksi WebRTC P2P.
-- **Backend (`apps/server`)**: Server Node.js *in-memory* tanpa ketergantungan paket eksternal (native HTTP + RFC 6455 WebSocket) yang mengelola kode Room `MMT-XXXX`, sinkronisasi *countdown*, dan kolaborasi editor dengan pembersihan otomatis (*TTL sweep* setiap 15 detik).
+- **Backend (`apps/server`)**: Server Node.js *in-memory* dengan HTTP Node.js, WebSocket ws, dan validasi pesan Zod yang mengelola kode Room `MMT-XXXX`, sinkronisasi *countdown*, dan kolaborasi editor dengan pembersihan otomatis (*TTL sweep* setiap 15 detik).
 - **Shared Contracts (`packages/shared`)**: Definisi tipe protokol, preset frame, filter warna, dan aset stiker yang digunakan bersama oleh frontend dan backend.
 
 ---
@@ -36,19 +36,19 @@ Lihat file `.env.example` di root proyek:
 | :--- | :--- | :--- | :--- |
 | `VITE_WS_URL` | `@momentos/web` | `ws://localhost:4000/ws` | URL WebSocket server produksi (gunakan `wss://domain-server-kamu/ws` pada HTTPS). |
 | `VITE_STUN_URLS` | `@momentos/web` | `stun:stun.l.google.com:19302` | Daftar server STUN dipisahkan koma untuk negosiasi ICE WebRTC. |
-| `VITE_TURN_URL` | `@momentos/web` | *(kosong)* | Opsional: URL server TURN (`turn:turn.domain.com:3478`) untuk jaringan NAT ketat. |
-| `VITE_TURN_USERNAME` | `@momentos/web` | *(kosong)* | Username kredensial TURN server. |
-| `VITE_TURN_CREDENTIAL` | `@momentos/web` | *(kosong)* | Password/token kredensial TURN server. |
+| `VITE_SITE_URL` | Frontend saat build | kosong | Origin HTTPS final untuk canonical, kartu berbagi, dan sitemap lima halaman publik. |
+| `TURN_URL` | Backend | kosong | Alamat relay TURN yang mendukung TURN REST. |
+| `TURN_SHARED_SECRET` | Backend | kosong | Secret bersama penyedia TURN untuk menandatangani kredensial peserta yang berlaku satu jam. |
 | `PORT` | `@momentos/server` | `4000` | Port HTTP & WebSocket server Node.js. |
 | `HOST` | `@momentos/server` | `0.0.0.0` | Interface jaringan yang didengarkan oleh server. |
-| `CORS_ORIGIN` | `@momentos/server` | `*` | Domain frontend yang diizinkan mengakses endpoint `/api/health` dan `/api/rooms/:code`. |
+| `CORS_ORIGIN` | Backend | Origin lokal saat pengembangan | Daftar origin frontend HTTPS yang boleh membuka WebSocket, dipisah koma. |
 
 ---
 
 ## 4. Langkah Deployment
 
 ### A. Deploy Backend Realtime (`@momentos/server`) — Railway / Render / Fly.io / VPS
-1. Pastikan runtime menggunakan **Node.js v22.6+** atau **Node.js v24+** (mendukung eksekusi TypeScript native).
+1. Pastikan runtime menggunakan **Node.js v22.18+** atau **Node.js v24+** (mendukung eksekusi TypeScript native).
 2. Set *Start Command* ke:
    ```bash
    npm run start:server
@@ -67,3 +67,5 @@ Lihat file `.env.example` di root proyek:
    ```
 3. Tambahkan Environment Variable `VITE_WS_URL` dengan alamat `wss://...` dari backend di atas.
 4. Pastikan situs diakses melalui **HTTPS** agar browser mengizinkan akses kamera (`navigator.mediaDevices.getUserMedia`).
+
+Sajikan file direktori `dist` termasuk `/booth/index.html` dan keempat halaman informasi sebelum aturan fallback SPA. Room lama dengan parameter `?room=` tetap didukung. Isi variabel frontend di penyedia build atau `apps/web/.env.production`, kemudian build ulang. Masukkan variabel backend melalui environment server. Rotasi kredensial TURN statis yang pernah disertakan dalam bundle publik.

@@ -67,7 +67,7 @@
   gap: clamp(12px, 2vw, 28px);
 }
 
-.classic-camera-layout { grid-template-areas: 'filters camera overlays'; }
+.classic-camera-layout { grid-template-columns: minmax(120px, 175px) minmax(0, 1fr); grid-template-areas: 'filters camera'; }
 
 .classic-camera-viewfinder {
   position: relative;
@@ -232,6 +232,17 @@ html[data-theme='night'] .flipbook-camera-choice[aria-pressed='true'] canvas {
   font-size: 0.8rem;
 }
 
+.flipbook-gesture-feedback {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  text-align: center;
+  font-size: .85rem;
+}
+
+.flipbook-gesture-feedback p { margin: 0; }
+
 .flipbook-overlay-notice {
   display: flex;
   flex-wrap: wrap;
@@ -297,7 +308,7 @@ html[data-theme='night'] .flipbook-camera-choice[aria-pressed='true'] canvas {
     grid-template-areas: 'camera camera' 'filters overlays' 'extra extra';
   }
 
-  .classic-camera-layout { grid-template-areas: 'camera camera' 'filters overlays'; }
+  .classic-camera-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'camera' 'filters'; }
 
   .flipbook-side-choices {
     grid-template-columns: none;
@@ -309,3 +320,15 @@ html[data-theme='night'] .flipbook-camera-choice[aria-pressed='true'] canvas {
 
   .flipbook-duo-accessories { grid-template-columns: minmax(0, 1fr); }
 }
+
+.pose-review { margin: 0; display: grid; justify-items: center; gap: 4px; font-size: .8rem; }
+.pose-review img { max-height: 120px; max-width: 100%; border-radius: 10px; }
+@media (max-width: 820px) {
+  .classic-camera-viewfinder, .flipbook-camera-viewport { order: -3; }
+  .classic-camera-actions { order: -1; }
+  .pose-review { order: -2; }
+  .flipbook-camera-choice { min-height: 44px; font-size: .76rem; }
+  .classic-camera-actions > .btn { min-height: 44px; }
+}
+
+@media (max-width: 820px) { .flipbook-shutter-actions { order: -2; } }

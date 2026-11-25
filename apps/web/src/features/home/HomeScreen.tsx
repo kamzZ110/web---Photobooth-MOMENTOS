@@ -23,7 +23,7 @@ const FAQ_ITEMS = [
   {
     num: '03',
     q: 'Berapa kali kami boleh mengulang pose (Retake)?',
-    a: 'Setiap sesi mendapatkan kuota maksimal 3× retake. Pada Mode Duo, jika Guest meminta foto ulang pada frame tertentu, Host akan menerima notifikasi persetujuan sebelum kamera menghitung mundur ulang.',
+    a: 'Setiap foto Classic bisa diulang hingga tiga kali. Pada Mode Duo, jika Guest meminta foto ulang pada frame tertentu, Host akan menerima notifikasi persetujuan sebelum kamera menghitung mundur ulang.',
   },
   {
     num: '04',
@@ -110,7 +110,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             style={{ minHeight: 52, padding: '12px 28px', fontSize: '0.98rem' }}
             onClick={() => onStartMode('solo', 'frame-select')}
           >
-            📸 Mulai Mode Solo
+            Mulai Classic Solo
           </button>
 
           <button
@@ -119,16 +119,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             style={{ minHeight: 52, padding: '12px 28px', fontSize: '0.98rem' }}
             onClick={() => onStartMode('duo', 'room')}
           >
-            👩‍💻🧑‍💻 Mulai Mode Duo
+            Foto Duo jarak jauh
           </button>
 
           <button
             type="button"
-            className="btn btn-lift"
-            style={{ minHeight: 52, padding: '12px 24px', fontSize: '0.98rem' }}
+            className="flipbook-home-link"
             onClick={() => onStartMode('solo', 'flipbook')}
           >
-            🎞️ Coba Mode Flipbook
+            Buat Flipbook animasi
           </button>
         </div>
 
@@ -188,7 +187,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               Siapkan Kamera &amp; Tekan Ready
             </h3>
             <p className="text-muted" style={{ fontSize: '0.94rem' }}>
-              Pilih 3 atau 4 jumlah pose, atur filter warna favoritmu, lalu pastikan
+              Pilih 1 sampai 8 pose, atur filter warna favoritmu, lalu pastikan
               kalian berdua siap sebelum countdown dimulai.
             </p>
           </div>
@@ -226,7 +225,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="btn btn-lift"
             onClick={() => navigateTop('how-it-works')}
           >
-            Pelajari Detail Cara Kerja →
+            Pelajari Detail Cara Kerja
           </button>
         </div>
       </section>
@@ -263,7 +262,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               style={{ width: '100%' }}
               onClick={() => onStartMode('solo', 'frame-select')}
             >
-              Mulai Sesi Solo →
+              Mulai Sesi Solo
             </button>
           </div>
 
@@ -289,7 +288,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               style={{ width: '100%' }}
               onClick={() => onStartMode('duo', 'room')}
             >
-              Buka Room Duo →
+              Buka Room Duo
             </button>
           </div>
         </div>
@@ -300,7 +299,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="btn btn-lift"
             onClick={() => navigateTop('modes-info')}
           >
-            Bandingkan Mode Solo &amp; Duo Selengkapnya →
+            Bandingkan Mode Solo &amp; Duo Selengkapnya
           </button>
         </div>
       </section>
@@ -353,7 +352,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="btn btn-lift"
             onClick={() => navigateTop('studio-features')}
           >
-            Jelajahi Semua Fitur Studio →
+            Jelajahi Semua Fitur Studio
           </button>
         </div>
       </section>
@@ -386,7 +385,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     {isOpen ? '−' : '+'}
                   </span>
                 </button>
-                {isOpen && <div className="faq-body">{item.a}</div>}
+                <div className="faq-body" hidden={!isOpen}>{item.a}</div>
               </div>
             );
           })}
@@ -398,100 +397,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             className="btn btn-lift"
             onClick={() => navigateTop('privacy-info')}
           >
-            Baca Halaman Privasi Selengkapnya →
+            Baca Halaman Privasi Selengkapnya
           </button>
         </div>
       </section>
 
-      {/* 6. SOLID INK FOOTER */}
-      <footer className="solid-footer">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 24,
-            paddingBottom: 32,
-            borderBottom: '1px solid rgba(255,255,255,0.16)',
-          }}
-        >
-          <div>
-            <h2 className="heading-h1" style={{ color: '#FFFFFF', marginBottom: 8 }}>
-              Siap abadikan <span className="font-upright-serif">momenmu</span> hari ini?
-            </h2>
-            <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: '0.96rem' }}>
-              Tanpa akun, tanpa galeri publik, langsung dari browser.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn btn-primary-pop"
-              style={{ borderColor: '#FFFFFF' }}
-              onClick={() => onStartMode('solo', 'frame-select')}
-            >
-              Mulai Solo →
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary-pop"
-              onClick={() => navigateTop('room')}
-            >
-              Masuk Room Duo
-            </button>
-          </div>
-        </div>
-
-        <div
-          style={{
-            paddingTop: 24,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 12,
-            fontSize: '0.84rem',
-            color: 'rgba(255,255,255,0.68)',
-          }}
-        >
-          <span>
-            <strong style={{ color: '#FFFFFF' }}>Momentos</strong> — Classic First
-            Photobooth (Solo &amp; Duo)
-          </span>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
-              onClick={() => navigateTop('how-it-works')}
-            >
-              Cara Kerja
-            </button>
-            <button
-              type="button"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
-              onClick={() => navigateTop('modes-info')}
-            >
-              Mode Solo &amp; Duo
-            </button>
-            <button
-              type="button"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
-              onClick={() => navigateTop('studio-features')}
-            >
-              Fitur Studio
-            </button>
-            <button
-              type="button"
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', cursor: 'pointer', font: 'inherit' }}
-              onClick={() => navigateTop('privacy-info')}
-            >
-              Privasi
-            </button>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };
