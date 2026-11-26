@@ -42,7 +42,7 @@ const message = z.discriminatedUnion('type', [
   z.object({ type: z.literal('clock:ping'), clientSentAt: z.number().nonnegative() }),
   z.object({ type: z.literal('capture:request'), takeNumber: pose }),
   z.object({ type: z.literal('capture:ack'), attemptId: id }),
-  z.object({ type: z.literal('capture:frame-sync'), frameIndex: z.int().min(0).max(7),
+  z.object({ type: z.literal('capture:frame-sync'), attemptId: z.uuid(), frameIndex: z.int().min(0).max(7),
     dataUrl: z.string().max(3_500_000).regex(/^data:image\/(?:png|jpeg);base64,[a-zA-Z0-9+/]+=*$/).optional() }),
   z.object({ type: z.literal('retake:request'), frameId: pose }),
   z.object({ type: z.literal('retake:decision'), requestId: id, approved: z.boolean() }),

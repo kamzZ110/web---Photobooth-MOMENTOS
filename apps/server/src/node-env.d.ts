@@ -15,6 +15,7 @@ declare function setInterval(handler: () => void, timeout?: number): unknown;
 declare class Buffer {
   static from(data: string, encoding?: string): Buffer;
   static from(data: number[]): Buffer;
+  static byteLength(data: string): number;
   static concat(list: Buffer[]): Buffer;
   static alloc(size: number): Buffer;
   readonly length: number;
@@ -80,7 +81,8 @@ declare module 'ws' {
     close(code: number, reason: string): void;
     terminate(): void;
     on(event: 'message', listener: (data: Buffer, isBinary: boolean) => void): void;
-    on(event: 'close' | 'error', listener: () => void): void;
+    ping(): void;
+    on(event: 'close' | 'error' | 'pong', listener: () => void): void;
   }
   export class WebSocketServer {
     constructor(options: { noServer: boolean; maxPayload: number; perMessageDeflate: boolean });

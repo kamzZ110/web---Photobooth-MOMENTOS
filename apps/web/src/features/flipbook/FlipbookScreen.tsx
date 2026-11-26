@@ -571,7 +571,7 @@ export const FlipbookScreen: React.FC<FlipbookScreenProps> = ({
           style={{
             display: 'flex',
             justifyContent: 'center',
-            gap: 6,
+            gap: 8,
             flexWrap: 'wrap',
             marginBottom: 24,
           }}

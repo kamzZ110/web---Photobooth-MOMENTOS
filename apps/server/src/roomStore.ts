@@ -51,6 +51,7 @@ interface InternalRoom {
   retakesRemaining: number;
   participants: InternalParticipant[];
   guestAdmitted?: boolean;
+  receivedRoles: Set<ParticipantRole>;
   countdown: ScheduledCountdown | null;
   retakePrompt: RetakePromptState | null;
   syncedFrames: SyncedFrameMedia[];
@@ -85,6 +86,10 @@ export class RoomStore {
     return code;
   }
 
+  private publicParticipants(room: InternalRoom): RoomParticipant[] {
+    return room.participants.map(({ rejoinToken: _token, ...participant }) => participant);
+  }
+
   private toPublicSnapshot(room: InternalRoom): AuthoritativeRoomSnapshot {
     return {
       code: room.code,
@@ -104,17 +109,21 @@ export class RoomStore {
       flipbookAccessories: room.flipbookAccessories && { ...room.flipbookAccessories },
       layout: room.layout,
       retakesRemaining: room.retakesRemaining,
-      participants: room.participants.map(({ rejoinToken: _token, ...pub }) => ({ ...pub })),
+      participants: this.publicParticipants(room),
       countdown: room.countdown ? { ...room.countdown } : null,
       retakePrompt: room.retakePrompt ? { ...room.retakePrompt } : null,
-      syncedFrames: room.syncedFrames.map((sf) => ({ ...sf })),
+      syncedFrames: room.syncedFrames.map(({ frameIndex, retakes, updatedAt }) => ({ frameIndex, retakes, updatedAt })),
       editorState: {
         ...room.editorState,
         stickers: room.editorState.stickers.map((s) => ({ ...s })),
         placedStickers: room.editorState.placedStickers.map((ps) => ({ ...ps })),
-        history: room.editorState.history.map((h) => ({ ...h })),
+        history: [], // Undo history stays on the authoritative server.
       },
     };
+  }
+
+  getStoredFrames(code: string) {
+    return this.rooms.get(code)?.syncedFrames ?? [];
   }
 
   private recomputeConnectionState(room: InternalRoom, now: number): void {
@@ -201,6 +210,7 @@ export class RoomStore {
       layout: 'strip-1x4',
       retakesRemaining: 3,
       participants: [host],
+      receivedRoles: new Set(),
       countdown: null,
       retakePrompt: null,
       syncedFrames: [0, 1, 2, 3, 4, 5, 6, 7].map((frameIndex) => ({
@@ -258,6 +268,7 @@ export class RoomStore {
       };
     }
 
+    if (room.mode !== 'duo') return { ok: false, errorCode: 'ROOM_NOT_FOUND', message: 'Room Duo tidak ditemukan.' };
     if (room.guestAdmitted || room.participants.length >= MAX_PARTICIPANTS) {
       return {
         ok: false,
@@ -347,6 +358,11 @@ export class RoomStore {
       };
     }
 
+    room.participants.forEach(p => { p.ready = false; });
+    if (room.countdown) {
+      room.countdown = null;
+      room.phase = 'setup';
+    }
     participant.connected = true;
     participant.lastSeenAt = now;
     participant.rejoinExpiresAt = null;
@@ -369,6 +385,7 @@ export class RoomStore {
     const target = room.participants.find((p) => p.participantId === participantId);
     if (!target) return null;
 
+    room.participants.forEach(p => { p.ready = false; });
     target.connected = false;
     target.ready = false;
     target.lastSeenAt = now;
@@ -382,17 +399,23 @@ export class RoomStore {
     return this.toPublicSnapshot(room);
   }
 
-  setReady(code: string, participantId: string, ready: boolean): AuthoritativeRoomSnapshot | null {
+  setReady(code: string, participantId: string, ready: boolean): Pick<AuthoritativeRoomSnapshot, 'code' | 'phase' | 'participants' | 'version'> | null {
     const room = this.rooms.get(code);
     if (!room) return null;
     const target = room.participants.find((p) => p.participantId === participantId);
     if (!target) return null;
 
+    if (room.countdown || room.phase === 'ended' || target.ready === ready) return null;
     target.ready = ready;
     target.lastSeenAt = Date.now();
     room.version += 1;
     this.recomputeConnectionState(room, Date.now());
-    return this.toPublicSnapshot(room);
+    return {
+      code: room.code,
+      phase: room.phase,
+      version: room.version,
+      participants: this.publicParticipants(room),
+    };
   }
 
   updateConfig(
@@ -407,11 +430,14 @@ export class RoomStore {
       flipbookAccessory?: unknown;
     }
   ):
-    | { ok: true; snapshot: AuthoritativeRoomSnapshot }
+    | { ok: true; snapshot: AuthoritativeRoomSnapshot | null }
     | { ok: false; errorCode: 'ROOM_NOT_FOUND' | 'FORBIDDEN_ROLE' | 'BAD_REQUEST'; message: string } {
     const room = this.rooms.get(code);
     if (!room) {
       return { ok: false, errorCode: 'ROOM_NOT_FOUND', message: 'Room tidak ditemukan.' };
+    }
+    if (patch.phase !== undefined) {
+      return { ok: false, errorCode: 'FORBIDDEN_ROLE', message: 'Fase diatur oleh server.' };
     }
     if (role !== 'host' && (patch.takeCount !== undefined || patch.selectedFilter !== undefined)) {
       return {
@@ -420,6 +446,11 @@ export class RoomStore {
         message: 'Hanya Host yang dapat mengubah jumlah take atau filter kamera.',
       };
     }
+
+    if (!patch.classicCameraEffect && !patch.flipbookAccessory &&
+        (patch.takeCount === undefined || patch.takeCount === room.takeCount) &&
+        (patch.selectedFilter === undefined || patch.selectedFilter === room.selectedFilter) &&
+        (patch.layout === undefined || patch.layout === room.layout)) return { ok: true, snapshot: null };
 
     const classicEffect = patch.classicCameraEffect as ClassicCameraEffectChange | undefined;
     if (classicEffect !== undefined) {
@@ -459,7 +490,8 @@ export class RoomStore {
     if (classicEffect) {
       room.classicCameraEffects = updateClassicCameraEffects(room.classicCameraEffects ?? DEFAULT_CLASSIC_CAMERA_EFFECTS, classicEffect);
     }
-    if (patch.layout) {
+    if (patch.layout && patch.layout !== room.layout) {
+      if (room.editorState.history.length >= 2048) room.editorState.history.shift();
       const prev = room.layout;
       room.layout = patch.layout;
       room.editorState.editorVersion += 1;
@@ -473,7 +505,6 @@ export class RoomStore {
         nextValue: patch.layout,
       });
     }
-    if (patch.phase) room.phase = patch.phase;
 
     room.version += 1;
     this.recomputeConnectionState(room, Date.now());
@@ -524,7 +555,7 @@ export class RoomStore {
     const prompt = room.retakePrompt;
     const complete = pose?.retakes?.host !== undefined && pose.retakes.guest !== undefined;
     const approved = prompt?.status === 'approved' && prompt.frameId === takeNumber;
-    if (!pose || takeNumber > room.takeCount || (complete && !approved)) {
+    if (room.countdown || room.phase === 'ended' || !pose || takeNumber > room.takeCount || (complete && !approved)) {
       return { ok: false, errorCode: 'NOT_READY', message: 'Pilih foto dan setujui pengambilan ulang terlebih dahulu.' };
     }
     const countdown: ScheduledCountdown = {
@@ -537,6 +568,8 @@ export class RoomStore {
     };
 
     room.phase = 'countdown';
+    room.participants.forEach(p => { p.ready = false; });
+    room.receivedRoles.clear();
     room.countdown = countdown;
     room.version += 1;
 
@@ -547,10 +580,12 @@ export class RoomStore {
     code: string,
     role: ParticipantRole,
     frameIndex: number,
+    attemptId: string,
     dataUrl?: string
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
-    if (!room || room.countdown?.takeNumber !== frameIndex + 1) return null;
+    if (!room || !room.countdown || room.countdown.attemptId !== attemptId || room.countdown.takeNumber !== frameIndex + 1) return null;
+    if (Date.now() > room.countdown.targetCaptureAtServer + 15_000) return null;
     if (room.countdown.retakeRole && room.countdown.retakeRole !== role) return null;
 
     let entry = room.syncedFrames.find((f) => f.frameIndex === frameIndex);
@@ -560,10 +595,12 @@ export class RoomStore {
     }
 
     const previous = entry.retakes?.[role];
+    if (room.receivedRoles.has(role)) return null;
     if (room.countdown.retakeRole && (previous ?? 0) >= 3) return null;
     const nextCount = room.countdown.retakeRole ? (previous ?? 0) + 1 : (previous ?? 0);
+    room.receivedRoles.add(role);
     entry.retakes = { ...entry.retakes, [role]: nextCount };
-    if (room.countdown.retakeRole || (entry.retakes.host !== undefined && entry.retakes.guest !== undefined)) {
+    if (room.countdown.retakeRole || (room.receivedRoles.has('host') && room.receivedRoles.has('guest'))) {
       room.countdown = null;
       room.phase = 'review';
       room.retakePrompt = null;
@@ -584,6 +621,7 @@ export class RoomStore {
     frameId: number
   ): AuthoritativeRoomSnapshot | null {
     const room = this.rooms.get(code);
+    if (room?.countdown) return null;
     const count = room?.syncedFrames[frameId - 1]?.retakes?.[role];
     if (!room || count === undefined || count >= 3 || room.retakePrompt?.status === 'pending') return null;
 
@@ -615,6 +653,7 @@ export class RoomStore {
       status: approved ? 'approved' : 'rejected',
     };
     if (approved) {
+      room.participants.forEach(p => { p.ready = false; });
       room.retakesRemaining = Math.max(0, room.retakesRemaining - 1);
     }
     room.version += 1;
@@ -810,6 +849,19 @@ export class RoomStore {
 
   getActiveRoomCount(): number {
     return this.rooms.size;
+  }
+
+  expireCountdowns(now: number): AuthoritativeRoomSnapshot[] {
+    const changed = [];
+    for (const room of this.rooms.values()) {
+      if (!room.countdown || now <= room.countdown.targetCaptureAtServer + 15_000) continue;
+      room.countdown = null;
+      room.phase = 'setup';
+      room.version++;
+      this.recomputeConnectionState(room, now);
+      changed.push(this.toPublicSnapshot(room));
+    }
+    return changed;
   }
 
   sweepExpired(): string[] {

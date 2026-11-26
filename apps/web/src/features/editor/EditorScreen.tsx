@@ -923,7 +923,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
+                  gap: 8,
                   flexWrap: 'wrap',
                   justifyContent: 'center',
                   padding: '6px 12px',
@@ -1087,7 +1087,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                     📷 Buka Kamera Ulang
                   </button>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {visibleFrames.map((fr) => (
                     <button
                       key={fr.id}
@@ -1167,7 +1167,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
             <div
               style={{
                 display: 'flex',
-                gap: 6,
+                gap: 8,
                 flexWrap: 'wrap',
                 paddingBottom: 12,
                 borderBottom: '1.5px solid rgba(24,24,27,0.12)',
@@ -1321,7 +1321,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                   Klik item di bawah untuk menempelkannya ke foto, lalu geser/besar-kecilkan/putar langsung di photostrip.
                 </p>
 
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                   {(
                     [
                       { id: 'all', label: 'Semua' },
@@ -1343,7 +1343,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
                   {filteredStickers.map((st) => (
                     <button
                       key={st.id}
@@ -1503,7 +1503,7 @@ export const EditorScreen: React.FC<EditorScreenProps> = ({
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
                     'Momentos Studio ✨',
                     'Besties Day Out ✌️',

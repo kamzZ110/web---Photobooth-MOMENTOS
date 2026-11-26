@@ -177,7 +177,7 @@ export function CameraAccessoryDemo({ allowCamera, cameraActive, onToggleCamera 
 
   return (
     <section className="clean-card camera-accessory-demo" aria-labelledby="camera-accessory-demo-title">
-      <div>
+      <div className="camera-accessory-demo-controls">
         <h2 className="heading-h3" id="camera-accessory-demo-title">Coba Aksesori Kamera</h2>
         <CameraAccessoryPicker label="Pilih aksesori" selected={selected} onSelect={setSelected} />
         {!live && <div className="camera-accessory-movements" role="group" aria-label="Gerakan contoh">

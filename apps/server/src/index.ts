@@ -20,6 +20,11 @@ const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_WS_BUFFER_BYTE
 interface ClientConn {
   socket: WebSocket;
   address: string;
+  unjoinedSince: number;
+  alive: boolean;
+  sentSince: number;
+  sentBytes: number;
+  controlBytes: number;
   roomCode: string | null;
   participantId: string | null;
   role: ParticipantRole | null;
@@ -45,7 +50,20 @@ function sendJson(conn: ClientConn, msg: ServerToClientMessage): void {
     conn.socket.close(1013, 'Koneksi terlalu lambat');
     return;
   }
-  conn.socket.send(JSON.stringify(msg));
+  const data = JSON.stringify(msg);
+  const now = Date.now();
+  if (now - conn.sentSince >= 1000) { conn.sentSince = now; conn.sentBytes = 0; conn.controlBytes = 0; }
+  // Control traffic has its own small budget. The larger allowance permits
+  // a full authenticated room restore (at most sixteen stored frame halves).
+  const media = msg.type === 'frame:media';
+  const bytes = Buffer.byteLength(data);
+  conn.sentBytes += bytes;
+  if (!media) conn.controlBytes += bytes;
+  if (conn.controlBytes > 2 * 1024 * 1024 || conn.sentBytes > 64 * 1024 * 1024) {
+    conn.socket.close(1013, 'Batas transfer room tercapai');
+    return;
+  }
+  conn.socket.send(data);
 }
 
 function sendTurn(conn: ClientConn) {
@@ -156,6 +174,12 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
         rejoinToken: msg.rejoinToken,
         snapshot: res.snapshot,
       });
+      for (const frame of store.getStoredFrames(res.code)) {
+        for (const role of ['host', 'guest'] as const) {
+          const dataUrl = role === 'host' ? frame.hostDataUrl : frame.guestDataUrl;
+          if (dataUrl) sendJson(conn, { type: 'frame:media', role, frameIndex: frame.frameIndex, dataUrl });
+        }
+      }
       broadcastRoom(res.code, { type: 'room:snapshot', snapshot: res.snapshot }, conn);
       return;
     }
@@ -170,6 +194,7 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
       conn.roomCode = null;
       conn.participantId = null;
       conn.role = null;
+      conn.unjoinedSince = Date.now();
       return;
     }
 
@@ -188,7 +213,7 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
       if (!conn.roomCode || !conn.participantId) return;
       const snap = store.setReady(conn.roomCode, conn.participantId, msg.ready);
       if (snap) {
-        broadcastRoom(conn.roomCode, { type: 'room:snapshot', snapshot: snap });
+        broadcastRoom(conn.roomCode, { type: 'room:ready', code: snap.code, version: snap.version, phase: snap.phase, participants: snap.participants });
       }
       return;
     }
@@ -211,7 +236,7 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
         });
         return;
       }
-      broadcastRoom(conn.roomCode, { type: 'room:snapshot', snapshot: res.snapshot });
+      if (res.snapshot) broadcastRoom(conn.roomCode, { type: 'room:snapshot', snapshot: res.snapshot });
       return;
     }
 
@@ -263,9 +288,11 @@ function handleClientMessage(conn: ClientConn, msg: ClientToServerMessage): void
         conn.roomCode,
         conn.role,
         msg.frameIndex,
+        msg.attemptId,
         msg.dataUrl
       );
       if (snap) {
+        if (msg.dataUrl) broadcastRoom(conn.roomCode, { type: 'frame:media', frameIndex: msg.frameIndex, role: conn.role, dataUrl: msg.dataUrl });
         broadcastRoom(conn.roomCode, { type: 'room:snapshot', snapshot: snap });
       }
       return;
@@ -323,14 +350,15 @@ server.on('upgrade', (req, socket, head) => {
   const origin = req.headers.origin;
   const address = req.socket.remoteAddress ?? 'unknown';
   if (req.url !== '/ws' || typeof origin !== 'string' || !allowedOrigins.has(origin) ||
-      clients.size >= 256 || !admit('connect:' + address, 90) ||
+      clients.size >= 256 || Array.from(clients).filter(c => !c.roomCode).length >= 64 || !admit('connect:' + address, 90) ||
       Array.from(clients).filter(c => c.address === address).length >= 32) {
     socket.destroy();
     return;
   }
   wss.handleUpgrade(req, socket, head, ws => {
-    const conn: ClientConn = { socket: ws, address, roomCode: null, participantId: null, role: null };
+    const conn: ClientConn = { socket: ws, address, unjoinedSince: Date.now(), alive: true, sentSince: Date.now(), sentBytes: 0, controlBytes: 0, roomCode: null, participantId: null, role: null };
     clients.add(conn);
+    ws.on('pong', () => { conn.alive = true; });
     let start = Date.now();
     let count = 0;
     let bytes = 0;
@@ -356,7 +384,16 @@ server.on('upgrade', (req, socket, head) => {
 
 setInterval(() => {
   const expired = new Set(store.sweepExpired());
-  for (const conn of clients) if (conn.roomCode && expired.has(conn.roomCode)) conn.socket.close(1000, 'Room berakhir');
+  const now = Date.now();
+  for (const snapshot of store.expireCountdowns(now)) broadcastRoom(snapshot.code, { type: 'room:snapshot', snapshot });
+  for (const conn of clients) {
+    if (!conn.alive || (!conn.roomCode && now - conn.unjoinedSince >= 60_000)) conn.socket.terminate();
+    else if (conn.roomCode && expired.has(conn.roomCode)) conn.socket.close(1000, 'Room berakhir');
+    else if (conn.socket.readyState === WebSocket.OPEN) {
+      conn.alive = false;
+      conn.socket.ping();
+    }
+  }
   for (const [key, bucket] of admissions) if (Date.now() - bucket.since >= 60_000) admissions.delete(key);
 }, 15_000);
 

@@ -1067,6 +1067,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   background: hostReady && guestReady ? '#ECF3ED' : '#FFFFFF',
                   color: '#18181B',
                 }}
+                disabled={Boolean(liveSnapshot?.countdown)}
                 onClick={() => {
                   realtimeClient.setReady(!myReady);
                 }}

@@ -311,7 +311,7 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
             style={{
               padding: 5,
               display: 'inline-flex',
-              gap: 6,
+              gap: 8,
             }}
           >
             <button
@@ -339,7 +339,7 @@ export const FrameSelectScreen: React.FC<FrameSelectScreenProps> = ({
               display: 'inline-flex',
               alignItems: 'center',
               flexWrap: 'wrap',
-              gap: 6,
+              gap: 8,
             }}
           >
             {([2, 3, 4] as const).map((cnt) => (

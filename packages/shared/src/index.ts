@@ -592,6 +592,7 @@ export type ClientToServerMessage =
     }
   | {
       type: 'capture:frame-sync';
+      attemptId: string;
       frameIndex: number;
       dataUrl?: string;
     }
@@ -629,6 +630,8 @@ export type ClientToServerMessage =
     };
 
 export type ServerToClientMessage =
+  | { type: 'frame:media'; role: ParticipantRole; frameIndex: number; dataUrl: string }
+  | { type: 'room:ready'; code: string; version: number; phase: RoomSessionPhase; participants: RoomParticipant[] }
   | { type: 'room:turn'; urls: string; username: string; credential: string }
   | {
       type: 'room:joined';

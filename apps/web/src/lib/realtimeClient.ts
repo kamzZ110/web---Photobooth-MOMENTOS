@@ -56,6 +56,7 @@ const MAX_FRAME_DATA_URL_LENGTH = 3_500_000;
 
 interface DataChannelChunkMessage {
   type: 'frame-chunk' | 'frame-complete';
+  attemptId: string;
   transferId: string;
   role: ParticipantRole;
   frameIndex: number;
@@ -89,6 +90,33 @@ class MomentosRealtimeClient {
   private dc: RTCDataChannel | null = null;
   private localStream: MediaStream | null = null;
   private pendingIce: RTCIceCandidateInit[] = [];
+  private localReady = false;
+  private receivedRoles = new Set<ParticipantRole>();
+  private countdownTimer: number | undefined;
+
+  private acceptCountdown(countdown: ScheduledCountdown, snapshot: AuthoritativeRoomSnapshot) {
+    this.localReady = false;
+    window.clearTimeout(this.countdownTimer);
+    this.incomingTransfers.clear();
+    this.receivedRoles.clear();
+    this.patchState({ lastScheduledCountdown: countdown, snapshot, lastError: null });
+    this.countdownTimer = window.setTimeout(() => {
+      if (this.state.lastScheduledCountdown?.attemptId !== countdown.attemptId) return;
+      this.incomingTransfers.clear();
+      const current = this.state.snapshot;
+      if (this.bc && current?.countdown?.attemptId === countdown.attemptId) {
+        this.patchState({ snapshot: { ...current, countdown: null, phase: 'setup' } });
+      }
+      this.patchState({ lastScheduledCountdown: null });
+    }, 18_000);
+  }
+
+  private allowsFrame(role: ParticipantRole, index: number, attemptId: string) {
+    const attempt = this.state.lastScheduledCountdown;
+    return !!attempt && attempt.attemptId === attemptId && attempt.takeNumber === index + 1 &&
+      (!attempt.retakeRole || attempt.retakeRole === role) && !this.receivedRoles.has(role);
+  }
+
   private incomingTransfers = new Map<
     string,
     { role: ParticipantRole; frameIndex: number; totalChunks: number; chunks: string[] }
@@ -169,7 +197,7 @@ class MomentosRealtimeClient {
   }
 
   public ensureTransport(): void {
-    if (!this.ws && !this.bc) this.connectWebSocket();
+    if ((!this.ws || this.ws.readyState === WebSocket.CLOSED) && !this.bc) this.connectWebSocket();
   }
 
   public retryWebSocketConnection(): void {
@@ -218,8 +246,10 @@ class MomentosRealtimeClient {
       };
 
       ws.onclose = () => {
+        if (this.ws !== ws) return;
+        this.ws = null;
         this.stopClockSync();
-        this.patchState({ transport: 'broadcast-fallback' });
+        this.patchState({ lastScheduledCountdown: null, transport: 'broadcast-fallback' });
       };
     } catch {
       this.patchState({ transport: 'broadcast-fallback' });
@@ -256,12 +286,34 @@ class MomentosRealtimeClient {
   // ============================================================================
   // TAHAP 4: ROOM & SESSION MANAGEMENT
   // ============================================================================
+  private tryLocalEntry = false;
+
+  private reconnectForEntry(retry: () => void): boolean {
+    if (this.tryLocalEntry || this.bc || typeof WebSocket === 'undefined') return false;
+    if (!this.ws) this.connectWebSocket();
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.CONNECTING) return false;
+    const finish = () => {
+      ws.removeEventListener('open', finish);
+      ws.removeEventListener('close', finish);
+      if (ws.readyState === WebSocket.OPEN) retry();
+      else if (!this.state.snapshot) {
+        this.tryLocalEntry = true;
+        try { retry(); } finally { this.tryLocalEntry = false; }
+      }
+    };
+    ws.addEventListener('open', finish);
+    ws.addEventListener('close', finish);
+    return true;
+  }
+
   public createRoom(params?: {
     displayName?: string;
     mode?: BoothMode;
     takeCount?: number;
     selectedFilter?: PhotoFilterId;
   }): void {
+    if (this.reconnectForEntry(() => this.createRoom(params))) return;
     const sent = this.sendWs({
       type: 'room:create',
       displayName: params?.displayName ?? 'Host',
@@ -296,7 +348,7 @@ class MomentosRealtimeClient {
             role: 'host',
             displayName: params?.displayName?.trim() || 'Host',
             connected: true,
-            ready: true,
+            ready: false,
             lastSeenAt: now,
             rejoinExpiresAt: null,
           },
@@ -325,6 +377,7 @@ class MomentosRealtimeClient {
   public joinRoom(rawCode: string, displayName = 'Guest'): void {
     const code = rawCode.trim().toUpperCase();
     if (!code) return;
+    if (this.reconnectForEntry(() => this.joinRoom(code, displayName))) return;
     this.patchState({ lastError: null });
     const sent = this.sendWs({
       type: 'room:join',
@@ -362,6 +415,8 @@ class MomentosRealtimeClient {
   }
 
   public leaveRoom(): void {
+    window.clearTimeout(this.countdownTimer);
+    this.localReady = false;
     this.bc?.close();
     this.bc = null;
     this.turnServer = null;
@@ -382,12 +437,18 @@ class MomentosRealtimeClient {
   }
 
   public setReady(ready: boolean): void {
+    if (this.state.snapshot?.countdown) return;
+    this.localReady = ready;
     const sent = this.sendWs({
       type: 'participant:ready',
       ready,
     });
 
-    if (!sent && this.state.snapshot && this.state.participantId) {
+    if (!sent && this.bc && !this.state.snapshot?.countdown && this.state.snapshot && this.state.participantId) {
+      if (this.state.role === 'guest') {
+        this.bc.postMessage({ type: 'bc:ready', ready });
+        return;
+      }
       const now = Date.now();
       const participants = this.state.snapshot.participants.map((p) =>
         p.participantId === this.state.participantId
@@ -403,7 +464,7 @@ class MomentosRealtimeClient {
         participants,
       };
       this.patchState({ snapshot: next });
-      this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+      this.broadcastLocalSnapshot(next);
     }
   }
 
@@ -422,6 +483,7 @@ class MomentosRealtimeClient {
 
     if (!sent && this.state.snapshot) {
       const accessory = patch.flipbookAccessory;
+      if (patch.phase !== undefined || (this.state.role !== 'host' && (patch.takeCount !== undefined || patch.selectedFilter !== undefined))) return;
       if ((accessory || patch.classicCameraEffect) && (this.state.role !== 'host' || this.state.snapshot.mode !== 'duo')) return;
       const prevLayout = this.state.snapshot.layout;
       const nextEditor = { ...this.state.snapshot.editorState };
@@ -454,11 +516,10 @@ class MomentosRealtimeClient {
           [accessory.role]: accessory.id,
         } : this.state.snapshot.flipbookAccessories,
         layout: patch.layout ?? this.state.snapshot.layout,
-        phase: patch.phase ?? this.state.snapshot.phase,
         editorState: nextEditor,
       };
       this.patchState({ snapshot: next });
-      this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+      this.broadcastLocalSnapshot(next);
     }
   }
 
@@ -487,7 +548,7 @@ class MomentosRealtimeClient {
       },
     };
     this.patchState({ snapshot: next });
-    this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+    this.broadcastLocalSnapshot(next);
   }
 
   public resumeFromRecoveryWindow(): void {
@@ -496,7 +557,7 @@ class MomentosRealtimeClient {
     const participants = this.state.snapshot.participants.map((p) => ({
       ...p,
       connected: true,
-      ready: true,
+      ready: false,
       lastSeenAt: now,
       rejoinExpiresAt: null,
     }));
@@ -511,7 +572,7 @@ class MomentosRealtimeClient {
       },
     };
     this.patchState({ snapshot: next, lastError: null });
-    this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+    this.broadcastLocalSnapshot(next);
   }
 
   // ============================================================================
@@ -617,7 +678,7 @@ class MomentosRealtimeClient {
   }
 
   private handleDataChannelChunk(msg: DataChannelChunkMessage): void {
-    if (!msg || msg.role === this.state.role || !['host', 'guest'].includes(msg.role) ||
+    if (!msg || !this.allowsFrame(msg.role, msg.frameIndex, msg.attemptId) || msg.role === this.state.role || !['host', 'guest'].includes(msg.role) ||
         !Number.isInteger(msg.frameIndex) || msg.frameIndex < 0 || msg.frameIndex >= 8 ||
         typeof msg.transferId !== 'string' || msg.transferId.length > 100) return;
     if (msg.type === 'frame-chunk' && msg.chunk !== undefined && msg.chunkIndex !== undefined) {
@@ -636,14 +697,18 @@ class MomentosRealtimeClient {
         };
         this.incomingTransfers.set(msg.transferId, item);
       }
+      if (item.totalChunks !== msg.totalChunks || item.frameIndex !== msg.frameIndex || item.role !== msg.role) return;
       item.chunks[msg.chunkIndex] = msg.chunk;
     } else if (msg.type === 'frame-complete') {
       const item = this.incomingTransfers.get(msg.transferId);
       if (item) {
         const dataUrl = item.chunks.join('');
         this.incomingTransfers.delete(msg.transferId);
-        if (Object.keys(item.chunks).length === item.totalChunks && dataUrl.length <= MAX_FRAME_DATA_URL_LENGTH &&
-            /^data:image\/(png|jpeg);base64,/.test(dataUrl)) this.applyLocalSyncedFrame(item.role, item.frameIndex, dataUrl);
+        if (item.role === msg.role && item.frameIndex === msg.frameIndex && Object.keys(item.chunks).length === item.totalChunks &&
+            dataUrl.length <= MAX_FRAME_DATA_URL_LENGTH && /^data:image\/(png|jpeg);base64,[a-zA-Z0-9+/]+=*$/.test(dataUrl)) {
+          this.receivedRoles.add(item.role);
+          this.applyLocalSyncedFrame(item.role, item.frameIndex, dataUrl);
+        }
       }
     }
   }
@@ -766,15 +831,22 @@ class MomentosRealtimeClient {
         return;
       }
       const now = Date.now();
+      const room = this.state.snapshot;
+      if (!this.bc || !this.localReady || !room || room.countdown || room.participants.length !== 2 ||
+          !room.participants.every(p => p.connected && p.ready)) return;
+      const pose = room.syncedFrames[takeNumber - 1];
+      const prompt = room.retakePrompt;
+      if (!pose || takeNumber > room.takeCount || (pose.retakes?.host !== undefined && pose.retakes?.guest !== undefined &&
+          !(prompt?.status === 'approved' && prompt.frameId === takeNumber))) return;
       const countdown: ScheduledCountdown = {
         attemptId: `att-${now}`,
         takeNumber,
-        retakeRole: this.state.snapshot?.retakePrompt?.status === 'approved' ? this.state.snapshot.retakePrompt.requestedBy : undefined,
+        retakeRole: prompt?.status === 'approved' && prompt.frameId === takeNumber ? prompt.requestedBy : undefined,
         startedAtServer: now,
         targetCaptureAtServer: now + 3000,
         durationMs: 3000,
       };
-      this.patchState({ lastScheduledCountdown: countdown, lastError: null });
+      this.acceptCountdown(countdown, { ...room, countdown, phase: 'countdown', participants: room.participants.map(p => ({ ...p, ready: false })) });
       if (this.state.snapshot) {
         this.bc?.postMessage({
           type: 'bc:countdown',
@@ -787,16 +859,36 @@ class MomentosRealtimeClient {
 
   public syncCapturedFrame(frameIndex: number, dataUrl: string): void {
     if (!dataUrl || dataUrl.length > MAX_FRAME_DATA_URL_LENGTH) return;
-    const role: ParticipantRole = this.state.role ?? 'host';
+    const role = this.state.role;
+    const attemptId = this.state.lastScheduledCountdown?.attemptId;
+    if (!role || !attemptId || !this.allowsFrame(role, frameIndex, attemptId)) return;
+    this.receivedRoles.add(role);
 
-    // 1. Send via P2P RTCDataChannel in 16KB chunks if connected
-    if (this.dc && this.dc.readyState === 'open') {
+    if (this.sendPeerFrame(role, frameIndex, attemptId, dataUrl)) {
+      this.sendWs({ type: 'capture:frame-sync', attemptId, frameIndex });
+      this.applyLocalSyncedFrame(role, frameIndex, dataUrl);
+      return;
+    }
+
+    const sent = this.sendWs({ type: 'capture:frame-sync', attemptId, frameIndex, dataUrl });
+    if (!sent && this.bc && this.state.snapshot) {
+      this.applyLocalSyncedFrame(role, frameIndex, dataUrl);
+      this.bc.postMessage({
+        type: 'bc:frame-sync', attemptId, code: this.state.snapshot.code, role, frameIndex, dataUrl,
+      });
+    }
+  }
+
+  private sendPeerFrame(role: ParticipantRole, frameIndex: number, attemptId: string, dataUrl: string): boolean {
+    const channel = this.dc;
+    if (!channel || channel.readyState !== 'open') return false;
+    try {
       const transferId = `${role}-${frameIndex}-${Date.now()}`;
       const totalChunks = Math.ceil(dataUrl.length / CHUNK_SIZE);
       for (let i = 0; i < totalChunks; i++) {
         const chunk = dataUrl.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
         const chunkMsg: DataChannelChunkMessage = {
-          type: 'frame-chunk',
+          type: 'frame-chunk', attemptId,
           transferId,
           role,
           frameIndex,
@@ -804,38 +896,19 @@ class MomentosRealtimeClient {
           totalChunks,
           chunk,
         };
-        this.dc.send(JSON.stringify(chunkMsg));
+        channel.send(JSON.stringify(chunkMsg));
       }
       const doneMsg: DataChannelChunkMessage = {
-        type: 'frame-complete',
+        type: 'frame-complete', attemptId,
         transferId,
         role,
         frameIndex,
       };
-      this.dc.send(JSON.stringify(doneMsg));
-      this.sendWs({ type: 'capture:frame-sync', frameIndex });
-      this.applyLocalSyncedFrame(role, frameIndex, dataUrl);
-      return;
-    }
-
-    // 2. Sync via Server or BroadcastChannel
-    const sent = this.sendWs({
-      type: 'capture:frame-sync',
-      frameIndex,
-      dataUrl,
-    });
-
-    if (!sent) {
-      this.applyLocalSyncedFrame(role, frameIndex, dataUrl);
-      if (this.state.snapshot) {
-        this.bc?.postMessage({
-          type: 'bc:frame-sync',
-          code: this.state.snapshot.code,
-          role,
-          frameIndex,
-          dataUrl,
-        });
-      }
+      channel.send(JSON.stringify(doneMsg));
+      return true;
+    } catch {
+      // A channel can close mid-transfer. The receiver only commits complete frames.
+      return false;
     }
   }
 
@@ -861,6 +934,8 @@ class MomentosRealtimeClient {
       ...this.state.snapshot,
       version: this.state.snapshot.version + 1,
       syncedFrames,
+      ...(this.bc && (this.state.snapshot.countdown?.retakeRole || this.receivedRoles.size === 2)
+        ? { countdown: null, phase: 'review' as const } : {}),
       retakePrompt: this.state.transport === 'broadcast-fallback' ? null : this.state.snapshot.retakePrompt,
     };
     this.patchState({ snapshot: next });
@@ -887,7 +962,7 @@ class MomentosRealtimeClient {
         },
       };
       this.patchState({ snapshot: next });
-      this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+      this.broadcastLocalSnapshot(next);
     }
   }
 
@@ -898,7 +973,7 @@ class MomentosRealtimeClient {
       approved,
     });
 
-    if (!sent && this.state.snapshot && this.state.snapshot.retakePrompt) {
+    if (!sent && this.bc && this.state.role === 'host' && this.state.snapshot?.retakePrompt?.requestId === requestId) {
       const next: AuthoritativeRoomSnapshot = {
         ...this.state.snapshot,
         version: this.state.snapshot.version + 1,
@@ -909,7 +984,7 @@ class MomentosRealtimeClient {
         },
       };
       this.patchState({ snapshot: next });
-      this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+      this.broadcastLocalSnapshot(next);
     }
   }
 
@@ -1083,7 +1158,7 @@ class MomentosRealtimeClient {
       },
     };
     this.patchState({ snapshot: next });
-    this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+    this.broadcastLocalSnapshot(next);
   }
 
   private applyLocalPersonalUndo(targetActor: ParticipantRole): void {
@@ -1163,16 +1238,45 @@ class MomentosRealtimeClient {
       },
     };
     this.patchState({ snapshot: next });
-    this.bc?.postMessage({ type: 'bc:snapshot', snapshot: next });
+    this.broadcastLocalSnapshot(next);
+  }
+
+  private broadcastLocalSnapshot(snapshot: AuthoritativeRoomSnapshot) {
+    this.bc?.postMessage({ type: 'bc:snapshot', snapshot: {
+      ...snapshot, syncedFrames: snapshot.syncedFrames.map(({ frameIndex, updatedAt, retakes }) => ({ frameIndex, updatedAt, retakes })),
+    } });
+  }
+
+  private mergeMedia(snapshot: AuthoritativeRoomSnapshot): AuthoritativeRoomSnapshot {
+    const prior = this.state.snapshot;
+    if (prior?.code !== snapshot.code) return snapshot;
+    return { ...snapshot, syncedFrames: snapshot.syncedFrames.map(frame => {
+      const cached = prior.syncedFrames.find(f => f.frameIndex === frame.frameIndex);
+      return { ...frame, hostDataUrl: cached?.hostDataUrl, guestDataUrl: cached?.guestDataUrl };
+    }) };
   }
 
   private handleServerMessage(msg: ServerToClientMessage): void {
     switch (msg.type) {
+      case 'frame:media':
+        this.receivedRoles.add(msg.role);
+        this.applyLocalSyncedFrame(msg.role, msg.frameIndex, msg.dataUrl);
+        break;
+      case 'room:ready': {
+        const room = this.state.snapshot;
+        if (room?.code === msg.code) this.patchState({ snapshot: {
+          ...room, participants: msg.participants, phase: msg.phase, version: msg.version,
+        } });
+        break;
+      }
       case 'room:turn': {
         this.turnServer = { urls: msg.urls, username: msg.username, credential: msg.credential };
         break;
       }
       case 'room:joined': {
+        this.localReady = false;
+        this.receivedRoles.clear();
+        this.incomingTransfers.clear();
         this.bc?.close();
         this.bc = null;
         this.saveSession({
@@ -1184,7 +1288,8 @@ class MomentosRealtimeClient {
           role: msg.role,
           participantId: msg.participantId,
           rejoinToken: msg.rejoinToken,
-          snapshot: msg.snapshot,
+          snapshot: this.mergeMedia(msg.snapshot),
+          lastScheduledCountdown: null,
           lastError: null,
         });
         if (msg.role === 'host' && msg.snapshot.participants.length === 2) {
@@ -1195,7 +1300,9 @@ class MomentosRealtimeClient {
       case 'room:snapshot': {
         const prevCount = this.state.snapshot?.participants.length ?? 0;
         this.patchState({
-          snapshot: msg.snapshot,
+          snapshot: this.mergeMedia(msg.snapshot),
+          ...(msg.snapshot.connectionState !== 'connected' || (!msg.snapshot.countdown && msg.snapshot.phase !== 'review')
+            ? { lastScheduledCountdown: null } : {}),
           lastError: null,
         });
         if (
@@ -1219,11 +1326,7 @@ class MomentosRealtimeClient {
         break;
       }
       case 'capture:scheduled': {
-        this.patchState({
-          lastScheduledCountdown: msg.countdown,
-          snapshot: msg.snapshot,
-          lastError: null,
-        });
+        this.acceptCountdown(msg.countdown, this.mergeMedia(msg.snapshot));
         break;
       }
       case 'webrtc:signal': {
@@ -1249,7 +1352,7 @@ class MomentosRealtimeClient {
       this.state.snapshot
     ) {
       const code = String(data.code ?? '');
-      if (code !== this.state.snapshot.code) return;
+      if (code !== this.state.snapshot.code || this.state.snapshot.mode !== 'duo') return;
 
       if (this.state.snapshot.participants.length >= 2) {
         this.bc?.postMessage({
@@ -1267,7 +1370,7 @@ class MomentosRealtimeClient {
         ...this.state.snapshot,
         version: this.state.snapshot.version + 1,
         connectionState: 'connected',
-        phase: 'ready',
+        phase: 'setup',
         participants: [
           ...this.state.snapshot.participants,
           {
@@ -1275,7 +1378,7 @@ class MomentosRealtimeClient {
             role: 'guest',
             displayName: String(data.displayName || 'Guest'),
             connected: true,
-            ready: true,
+            ready: false,
             lastSeenAt: now,
             rejoinExpiresAt: null,
           },
@@ -1291,6 +1394,12 @@ class MomentosRealtimeClient {
         snapshot: updated,
       });
       void this.startWebRtcNegotiation();
+    } else if (data.type === 'bc:ready' && this.state.role === 'host' && this.state.snapshot && !this.state.snapshot.countdown && typeof data.ready === 'boolean') {
+      const room = this.state.snapshot;
+      const participants = room.participants.map(p => p.role === 'guest' ? { ...p, ready: data.ready as boolean } : p);
+      const next = { ...room, participants, version: room.version + 1, phase: participants.every(p => p.ready && p.connected) ? 'ready' as const : 'setup' as const };
+      this.patchState({ snapshot: next });
+      this.broadcastLocalSnapshot(next);
     } else if (data.type === 'bc:joined-guest' && !this.state.role) {
       const snapshot = data.snapshot as AuthoritativeRoomSnapshot;
       const code = String(data.code);
@@ -1307,13 +1416,16 @@ class MomentosRealtimeClient {
     } else if (data.type === 'bc:snapshot' && this.state.snapshot) {
       const incoming = data.snapshot as AuthoritativeRoomSnapshot;
       if (incoming.code === this.state.snapshot.code) {
-        this.patchState({ snapshot: incoming, lastError: null });
+        if (incoming.connectionState !== 'connected' || (incoming.retakePrompt?.status === 'approved' &&
+            incoming.retakePrompt.requestId !== this.state.snapshot.retakePrompt?.requestId)) this.localReady = false;
+        this.patchState({ snapshot: this.mergeMedia(incoming), lastError: null });
       }
     } else if (data.type === 'bc:countdown' && this.state.snapshot) {
       if (data.code === this.state.snapshot.code) {
-        this.patchState({
-          lastScheduledCountdown: data.countdown as ScheduledCountdown,
-        });
+        const room = this.state.snapshot;
+        if (!this.localReady || this.state.role !== 'guest' || !room.participants.find(p => p.role === 'guest')?.ready || room.countdown) return;
+        const countdown = data.countdown as ScheduledCountdown;
+        this.acceptCountdown(countdown, { ...room, countdown, phase: 'countdown', participants: room.participants.map(p => ({ ...p, ready: false })) });
       }
     } else if (data.type === 'bc:webrtc-signal' && this.state.snapshot) {
       if (data.code === this.state.snapshot.code) {
@@ -1323,7 +1435,9 @@ class MomentosRealtimeClient {
         );
       }
     } else if (data.type === 'bc:frame-sync' && this.state.snapshot) {
-      if (data.code === this.state.snapshot.code) {
+      if (data.code === this.state.snapshot.code && data.role !== this.state.role &&
+          this.allowsFrame(data.role as ParticipantRole, Number(data.frameIndex), String(data.attemptId))) {
+        this.receivedRoles.add(data.role as ParticipantRole);
         this.applyLocalSyncedFrame(
           data.role as ParticipantRole,
           Number(data.frameIndex),

@@ -26,6 +26,23 @@ npm run build
 
 Hasil build statis frontend akan berada di `apps/web/dist/`.
 
+### Preview lokal dengan konfigurasi Cloudflare Workers Static Assets
+
+Jalankan dari root repository dengan Node 24:
+
+```powershell
+npm.cmd ci
+npm.cmd run typecheck
+node --test apps/server/test/room-security.test.mjs
+npm.cmd audit
+npm.cmd run build
+npm.cmd run preview
+```
+
+Untuk menguji aturan route dan header Cloudflare secara lokal, jalankan `npx.cmd --yes wrangler@4.168.0 dev --local` dari root setelah build. Konfigurasi `wrangler.jsonc` menggunakan `apps/web/dist`. Vite menyalin `apps/web/public/_headers` ke output saat build.
+
+Periksa `/`, keempat halaman informasi, dan `/booth/`. Buka juga `/booth?room=MMT-EXAMPLE` untuk memastikan redirect menuju `/booth/` mempertahankan query. Periksa header `X-Frame-Options`, `X-Content-Type-Options`, dan `Referrer-Policy` pada respons HTML. Route yang tidak dikenal harus menghasilkan 404 agar tetap dapat dibedakan dari halaman studio.
+
 ---
 
 ## 3. Variabel Lingkungan (`.env`)

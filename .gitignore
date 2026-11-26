@@ -10,8 +10,13 @@ build/
 
 # Environment variables & secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Cloudflare local development
+.dev.vars
+.dev.vars.*
+.wrangler/
 
 # OS & Editor files
 .DS_Store
